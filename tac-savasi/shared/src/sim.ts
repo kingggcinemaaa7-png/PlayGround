@@ -94,6 +94,7 @@ export class Sim {
       hasRage: this.time < a.rageUntil,
       hasGiant: this.time < a.giantUntil && a.giantActive,
       mutatorDouble: this.cfg.mutator === 'double',
+      level: a.level,
     });
   }
 
@@ -363,14 +364,20 @@ export class Sim {
   dealDamage(killerId: string, victimId: string, dmg: number) {
     const k = this.avatars.get(killerId), v = this.avatars.get(victimId);
     if (!v?.alive) return;
-    v.hp -= dmg;
+    // ABSORB (Adsorpsiyon): gelen hasar yarıya iner, diğer yarısı cana dönüşür
+    let final = dmg;
+    if (this.time < v.absorbUntil) {
+      final = dmg * 0.5;
+      v.hp = Math.min(v.maxHp, v.hp + dmg * 0.5);
+    }
+    v.hp -= final;
     if (k) {
-      k.damage += dmg;
-      if (this.time < k.vampUntil) k.hp = Math.min(k.maxHp, k.hp + dmg * 0.35);
+      k.damage += final;
+      if (this.time < k.vampUntil) k.hp = Math.min(k.maxHp, k.hp + final * 0.35);
     }
     v.lastActive = this.time;
     if (k) k.lastActive = this.time;
-    if (v.hp <= 0) this.kill(killerId, victimId, dmg);
+    if (v.hp <= 0) this.kill(killerId, victimId, final);
   }
   kill(killerId: string, victimId: string, dmg?: number) {
     const k = this.avatars.get(killerId), v = this.avatars.get(victimId);
@@ -599,10 +606,30 @@ export class Sim {
       reflectUntil: 0, chainUntil: 0,
       trappedUntil: 0, fireCd: range(this.rng, 0, 0.5),
       likeCount: 0, lastActive: this.time,
+      level: 1, absorbUntil: 0,
       orbitR: 120 + this.rng() * 300, orbitPhase: this.rng() * Math.PI * 2,
       aimX: p.x, aimY: p.y, aimT: 0,
       orbAngle: this.rng() * Math.PI * 2, orbCd: this.cfg.orbit.cd,
     };
+  }
+
+  /** LEVEL UP: kalıcı +25 maxHp (canla birlikte) ve seviye başına +12% hasar. Max 5. */
+  static readonly MAX_LEVEL = 5;
+  levelUp(userId: string, n = 1): number {
+    const a = this.avatars.get(userId);
+    if (!a?.alive) return 0;
+    let ups = 0;
+    for (let i = 0; i < n && a.level < Sim.MAX_LEVEL; i++) {
+      a.level += 1;
+      a.maxHp += 25;
+      a.hp = Math.min(a.maxHp, a.hp + 25);
+      ups++;
+    }
+    if (ups > 0) {
+      a.lastActive = this.time;
+      this.emit({ type: 'power', userId, kind: 'levelup', quiet: false });
+    }
+    return a.level;
   }
 }
 

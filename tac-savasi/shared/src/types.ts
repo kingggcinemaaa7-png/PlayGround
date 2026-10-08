@@ -35,6 +35,10 @@ export interface AvatarState {
   giantUntil: number; giantActive: boolean;
   reflectUntil: number; chainUntil: number;
   trappedUntil: number; fireCd: number; likeCount: number;
+  /** seviye (LEVEL UP skilleriyle kalıcı büyür, max 5): +maxHp ve +hasar */
+  level: number;
+  /** emilim (ABSORB): gelen hasar yarıya iner, yarısı cana dönüşür */
+  absorbUntil: number;
   /** yörünge silahı: yıldızların açısal konumu (radyan) ve faz hız çarpanı */
   orbAngle: number; orbCd: number;
   lastActive: number; powerLabel?: string;

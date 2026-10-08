@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GiftRegistry, normGiftName, DEFAULT_GIFTS } from '../src/gifts.js';
+import { GiftRegistry, normGiftName, DEFAULT_GIFTS, GIFT_ACTIONS } from '../src/gifts.js';
 import { giftTier } from '../src/types.js';
 
 describe('hediye ismi normalizasyonu', () => {
@@ -65,5 +65,20 @@ describe('kayit defteri', () => {
     expect(giftTier(1)).toBe(1);
     expect(giftTier(200)).toBe(4);
     expect(giftTier(1000)).toBe(5);
+  });
+});
+
+describe('isimli skiller (AvatarBattle 12li menu)', () => {
+  it('11 yeni aksiyon kayitta', () => {
+    const ids = GIFT_ACTIONS.map((a) => a.id);
+    for (const id of ['lightning', 'randomAttack', 'powerAttack', 'shieldAll', 'absorb',
+      'healBig', 'levelup', 'levelupBig', 'speedSmall', 'speedBig', 'aoeAttack']) {
+      expect(ids).toContain(id);
+    }
+  });
+  it('hediye yeni aksiyona baglanabilir', () => {
+    const reg = new GiftRegistry();
+    expect(reg.setAction('rose', 'aoeAttack')).toBe(true);
+    expect(reg.lookup('rose')?.action).toBe('aoeAttack');
   });
 });

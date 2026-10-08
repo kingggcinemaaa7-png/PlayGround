@@ -23,3 +23,26 @@ describe('registry', () => {
     expect(cleanName('Elif')).toBe('Elif');
   });
 });
+
+describe('TikTok mesaj alanlari (adapter regresyonu)', () => {
+  /** 2.5.0 kutuphanesi ic ice alanlar dondurur; eski kod duz alan okuyordu
+   *  ve hediyeler hic gelmiyordu. Bu test dogru yollari sabitler. */
+  it('mesajlar duz degil ic ice yapidadir', () => {
+    const msg = {
+      common: { msgId: 'm1' },
+      user: { displayId: 'u1', nickname: 'Deniz', profilePictureUrl: 'p.png' },
+      gift: { name: 'Rose', describe: 'Rose', diamondCount: 1 },
+      repeatCount: 3,
+      repeatEnd: 0,
+      logId: 'log1',
+    };
+    // ESKI HATALI YOL: d.userId / d.nickname / d.giftName / d.diamondCount
+    expect((msg as unknown as Record<string, unknown>).userId).toBeUndefined();
+    expect((msg as unknown as Record<string, unknown>).nickname).toBeUndefined();
+    expect((msg as unknown as Record<string, unknown>).giftName).toBeUndefined();
+    expect((msg as unknown as Record<string, unknown>).diamondCount).toBeUndefined();
+    // DOGRU YOL
+    expect(msg.user.nickname).toBe('Deniz');
+    expect(msg.gift.diamondCount).toBe(1);
+  });
+});

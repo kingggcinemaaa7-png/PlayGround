@@ -12,6 +12,7 @@ export interface MultOpts {
   hasRage?: boolean;     // x2 rage
   hasGiant?: boolean;    // x1.5 giant
   mutatorDouble?: boolean; // x2 mutator
+  level?: number;        // LEVEL UP: her seviye +12% hasar
   table: SimConfig['streakBonus'];
   cap: number;
 }
@@ -23,6 +24,7 @@ export function damageMultiplier(o: MultOpts): number {
   if (o.hasRage) m *= 2;
   if (o.hasGiant) m *= 1.5;
   if (o.mutatorDouble) m *= 2;
+  if ((o.level ?? 1) > 1) m *= 1 + (Math.min(o.level ?? 1, 5) - 1) * 0.12;
   return Math.min(m, o.cap);
 }
 

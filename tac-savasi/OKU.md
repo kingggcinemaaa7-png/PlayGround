@@ -149,6 +149,28 @@ Fabrika kataloğu 12 hediyedir (Rose, GG, Coffee, Ice Cream, Donut, Heart, Game,
 varsayılan eylemleri konsolun **Hediye Yönetimi** tablosunda değiştirilebilir; kademe yalnızca
 elmas değerine bakar, yani elması değiştirince hediye başka kademeye düşer.
 
+## İsimli skiller (12'li menü)
+
+Her hediye isimli bir SKILL'e bağlanabilir. Tetiklenince arenanın ortasında büyük
+çizgi-roman başlığı + sinematik efekt + kamera sarsıntısı olur:
+
+| skill | etki |
+|---|---|
+| JOIN GAME! | oyuna ilk katılımda giriş patlaması (6sn kısma ile) |
+| LIGHTNING STORM! | 5 rastgele düşmana yıldırım, 25 hasar |
+| RANDOM ATTACK! | tek rastgele düşmana suikast, 70 hasar |
+| POWER ATTACK! | en güçlü (canı en çok) düşmana 120 hasar, zaman durması + zoom |
+| SHIELD DEFENSE! | sahip + 220px içindeki dostlara 8sn kalkan kubbesi |
+| ABSORB! (Adsorpsiyon) | 10sn boyunca gelen hasar yarıya iner, diğer yarısı cana dönüşür |
+| LARGE HEALTH! | canı tamamen doldurur |
+| LEVEL UP! | +1 seviye (kalıcı +25 maxHp, +%12 hasar; max 5) |
+| LEVEL UP! (büyük) | +2 seviye |
+| SPEED UP! (hafif) | 6sn hız |
+| SPEED UP! (mükemmel) | 15sn hız |
+| AOE ATTACK! | tüm arenaya halka hasar: her düşmana 35 hasar |
+
+Seviye avatarın üstünde ⭐ rozetiyle görünür. Seviye hasar bonusu tavana (x3) tabidir.
+
 ## Sahnede neler oluyor (görsel ve savaş)
 
 Bunlar otomatik çalışır, ayar gerektirmez:
@@ -162,11 +184,20 @@ Bunlar otomatik çalışır, ayar gerektirmez:
 - **Savaş ısısı:** seri/kalabalık arttıkça ekran kenarları ısınır, konfeti sıklaşır, müzik yoğunlaşır.
 - **Boss fazları:** can %66 ve %33'te faz değişir — ekran sarsılır, kırmızı basınç artar, "FURIA MÁXIMA" çıkar.
 - **Son 60 saniye:** "ÜLTİMO MINUTO" → son 30 saniye "TODO O NADA" → son 10 saniye "ÜLTIMOS 10", her adımda konfeti ve finale müziği.
-- **Her hediye:** büyük kahraman kartı (ikon + isim + ne yaptığı) + aşağıdan yukarı kayan isim şeridi.
-- **Yörünge silahı:** her savaşçının profil fotoğrafının etrafında **dönen yıldızlar** vardır.
-  Yıldız bir düşmana değdiğinde hasar verir, parlar iz bırakır ve kıvılcım çıkarır.
-  Rengi duruma göre değişir: normal altın · kalkan mavi · öfke kırmızı · dev altın ve büyük.
-  Konsol → **Kalıcı** bölümünden yıldız sayısı / hasar / yarıçap ayarlanır (`0` = silah kapalı).
+- **Her hediye:** tek büyük kahraman kartı — hediye ikonu, gönderen ismi, hediyenin adı+elması
+  ve altında sarı rozetle "ne yaptı" (örn. `TORNADO`, `SEVİYE ATLADI!`). Kart kuyruğa girer:
+  üst üste binmeden 3,6 saniyede bir sırayla görünür (en fazla 8 bekler).
+  Hediye yağmurunda kartlar **kuyruğa girer**: üst üste binmeden 3,6 saniyede bir sırayla görünür (en fazla 8 bekler).
+- **Yörünge silahı (bumerang):** her savaşçının profil fotoğrafının etrafında **dönen bumerang paletleri**
+  vardır; her paletin arkasında 9 toptan oluşan **parlayan ışık zinciri** uzanır.
+  Palet bir düşmana değdiğinde hasar verir ve kıvılcım çıkarır.
+  Rengi duruma göre değişir: normal altın · kalkan mavi · öfke kırmızı · dev büyük altın.
+  Konsol → **Kalıcı** bölümünden palet sayısı / hasar / yarıçap ayarlanır (`0` = silah kapalı).
+- **Can halkası:** her profil fotoğrafını saran yaydır — yeşil → sarı → kırmızı; can azalınca nabız
+  gibi atar, kalkandayken etrafında mavi halka belirir.
+- **Rozetler:** hız (⚡) / öfke (🔥) / kalkan (🛡) / seri (⚔) avatarın üstünde küçük madalyon olarak görünür.
+- **Gösterişli mermiler:** her mermi nabız gibi atan bir kuyruklu yıldızdır — başında parlak çekirdek,
+  arkasında 2 sönümlü iz parçası; namludan çıkarken kısa parlayış, 30+ hasarda arenada kocaman **BOOM!** yazısı.
 
 ## Döngü
 

@@ -93,5 +93,17 @@
   "boss.kraken": "FURIOUS KRAKEN",
   "boss.crab": "HERMIT CRAB",
   "next": "NEXT MATCH",
-  "enemy": "ENEMY"
+  "enemy": "ENEMY",
+  "skill.join": "JOIN GAME!",
+  "skill.lightning": "LIGHTNING STORM!",
+  "skill.randomAttack": "RANDOM ATTACK!",
+  "skill.powerAttack": "POWER ATTACK!",
+  "skill.shieldAll": "SHIELD DEFENSE!",
+  "skill.absorb": "ABSORB!",
+  "skill.healBig": "LARGE HEALTH!",
+  "skill.levelup": "LEVEL UP!",
+  "skill.levelupBig": "BIG LEVEL UP!",
+  "skill.speedSmall": "SPEED UP!",
+  "skill.speedBig": "ULTIMATE SPEED!",
+  "skill.aoeAttack": "AOE ATTACK!"
 }

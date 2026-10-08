@@ -9,6 +9,17 @@ export type GiftAction =
   | 'meteor' | 'tornado'
   | 'rage' | 'ghost' | 'vamp' | 'giant' | 'reflect' | 'chain' | 'frost' | 'clone'
   | 'streak5'   // +5 streak, nothing else
+  | 'lightning'   // LIGHTNING STORM: 5 yıldırım, rastgele düşmanlara
+  | 'randomAttack' // RANDOM ATTACK: tek rastgele düşmana suikast
+  | 'powerAttack'  // POWER ATTACK: en güçlü düşmana infaz vuruşu
+  | 'shieldAll'    // SHIELD DEFENSE: sahip + yakın dostlara kubbe
+  | 'absorb'       // ABSORB (Adsorpsiyon): hasarı cana çevirme aurası
+  | 'healBig'      // LARGE HEALTH: tam can + yeşil patlama
+  | 'levelup'      // LEVEL UP (küçük): +1 seviye
+  | 'levelupBig'   // LEVEL UP (büyük): +2 seviye
+  | 'speedSmall'   // SPEED UP (hafif): 6sn hız
+  | 'speedBig'     // SPEED UP (mükemmel): 15sn hız
+  | 'aoeAttack'    // AOE ATTACK: arena geneli halka hasar
   | 'ignore';   // counted for goal/gifters, no avatar effect
 
 export interface GiftDef {
@@ -38,6 +49,17 @@ export const GIFT_ACTIONS: { id: GiftAction; tr: string }[] = [
   { id: 'frost', tr: '❄ Dondurma' },
   { id: 'clone', tr: '👥 Klon' },
   { id: 'streak5', tr: '+5 seri' },
+  { id: 'lightning', tr: '⛈️ Yıldırım dizisi' },
+  { id: 'randomAttack', tr: '🎯 Rastgele saldırı' },
+  { id: 'powerAttack', tr: '💥 Süper saldırı' },
+  { id: 'shieldAll', tr: '🛡️ Kalkan kubbesi' },
+  { id: 'absorb', tr: '🌀 Adsorpsiyon' },
+  { id: 'healBig', tr: '💚 Büyük iyileşme' },
+  { id: 'levelup', tr: '⬆️ Seviye +1' },
+  { id: 'levelupBig', tr: '⬆️⬆️ Seviye +2' },
+  { id: 'speedSmall', tr: '🥾 Hafif hız' },
+  { id: 'speedBig', tr: '🚀 Mükemmel hız' },
+  { id: 'aoeAttack', tr: '☄️ Kitlesel saldırı' },
   { id: 'ignore', tr: 'Yoksay (sayaç işler)' },
 ];
 

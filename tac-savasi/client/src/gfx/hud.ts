@@ -508,6 +508,52 @@ export class Hud {
     this.announceBox.y = Z.center.y;
   }
 
+  /**
+   * SKILL başlığı: hediye skilleri için büyük çizgi-roman başlığı.
+   * announce'tan farklı: dedupe yok (her hediye görünür), arenanın
+   * ortasında tek başına durur, punch-in + sarsıntısız sönümle kaybolur.
+   */
+  skillBanner(text: string, sub: string | undefined, color: number) {
+    const box = new PIXI.Container();
+    const glow = new PIXI.Sprite(glowTex());
+    glow.anchor.set(0.5);
+    glow.tint = color; glow.alpha = 0.55; glow.blendMode = 'add';
+    glow.width = 900; glow.height = 420;
+    const label = txt(text, 84, color, {
+      stroke: { color: 0x12081f, width: 10, join: 'round' },
+    });
+    label.anchor.set(0.5);
+    const MAXW = 940;
+    if (label.width > MAXW) label.scale.set(MAXW / label.width);
+    box.addChild(glow, label);
+    if (sub) {
+      const second = soft(sub, 30, 0xfff3c4);
+      second.anchor.set(0.5);
+      second.position.set(0, 84 * label.scale.y * 0.62 + 30);
+      box.addChild(second);
+    }
+    box.position.set(540, 780);
+    box.rotation = -0.06;
+    box.alpha = 0;
+    box.scale.set(0.3);
+    this.centerLayer.addChild(box);
+    // üst üste binmesin: en fazla 2 banner yaşar
+    const olds = this.centerLayer.children.filter(
+      (c) => (c as unknown as { __skill?: boolean }).__skill && c !== box,
+    );
+    while (olds.length >= 2) {
+      const o = olds.shift()!;
+      o.destroy({ children: true });
+    }
+    (box as unknown as { __skill?: boolean }).__skill = true;
+    tweener.to(box, 'alpha', 1, 0.14, { id: 'sk-a' });
+    tweener.to(box, 'scale', 1.1, 0.3, { ease: Ease.outBack, id: 'sk-s' });
+    tweener.to(box, 'scale', 1, 0.25, { delay: 0.3, ease: Ease.outCubic, id: 'sk-s2' });
+    tweener.to(box, 'alpha', 0, 0.4, {
+      delay: 1.6, id: 'sk-out', onDone: () => { box.destroy({ children: true }); },
+    });
+  }
+
   mercyShow(victimName: string, killerName: string, victimId: string, killerId: string) {
     this.mercyHide();
     const box = new PIXI.Container();
@@ -560,9 +606,9 @@ export class Hud {
   }
 
   /**
-   * Kahraman kartı (Faz 1.4): HER hediye için büyük, animasyonlu kart.
-   * `icon` hediye simgesi, `effect` ne yaptığını söyler. Kart üstten kayar,
-   * parlar ve kaybolur; ardından isim ekranın üstünden yükselip uçar.
+   * Kahraman kartı: HER hediye için tek büyük, animasyonlu kart.
+   * İsim + hediye + "ne yaptı" rozeti tek kartta toplanır; altında ayrı bir
+   * isim şeridi ÇIKARILDI (aynı isim iki kez görünüyordu).
    */
   heroCard(name: string, userId: string, desc: string, color: number, icon?: string, effect?: string) {
     const box = new PIXI.Container();
@@ -588,12 +634,22 @@ export class Hud {
       ico.anchor.set(0.5); ico.resolution = 2; ico.position.set(60, 52);
       badge.addChild(halo, ico);
     }
-    const title = txt(`★ ${truncateNick(name, 14)}`, 44, 0xffffff);
-    title.anchor.set(0, 0.5); title.position.set(190, 78);
-    const sub = soft(desc, 28, 0xfff3c4);
-    sub.anchor.set(0, 0.5); sub.position.set(192, 132);
-    const eff = effect ? soft(effect, 24, 0xffffff) : null;
-    if (eff) { eff.anchor.set(0, 0.5); eff.position.set(192, 176); eff.alpha = 0.9; }
+    const title = txt(`★ ${truncateNick(name, 14)}`, 46, 0xffffff);
+    title.anchor.set(0, 0.5); title.position.set(190, 66);
+    const sub = soft(desc, 30, 0xfff3c4);
+    sub.anchor.set(0, 0.5); sub.position.set(192, 118);
+    // "ne yaptı" etiketi: isimli skillerde kartın altında vurgulu rozet
+    let eff: PIXI.Text | null = null;
+    if (effect) {
+      eff = soft(effect, 26, 0x12081f);
+      eff.anchor.set(0.5);
+      const chipW = Math.min(300, effect.length * 17 + 44);
+      const chip = panel(chipW, 40, 0.92, 14);
+      chip.tint = 0xfff3c4;
+      eff.position.set(192 + chipW / 2, 166);
+      box.addChild(chip);
+      tweener.to(chip, 'scale', 1, 0.4, { from: 0.6, delay: 0.18, ease: Ease.outBack, id: 'hero-chip' });
+    }
     box.addChild(bg, glow, pic, ...(badge ? [badge] : []), title, sub, ...(eff ? [eff] : []));
     // giriş: yukarıdan düş + geri sekmeli büyüme + parlak şimşek
     box.position.set(Z.hero.x, Z.hero.y - 90);
@@ -608,30 +664,6 @@ export class Hud {
     // çıkış: küçülüp kaybol (id'li -> girişi silmez)
     tweener.to(box, 'scale', 0.86, 0.35, { delay: 3.2, ease: Ease.inCubic, id: 'hero-out-s' });
     tweener.to(box, 'alpha', 0, 0.35, { delay: 3.2, id: 'hero-out-a', onDone: () => box.destroy({ children: true }) });
-    // isim kartı yukarıdan kayarak geçer (her hediyede tekrar eden görsel ritim)
-    this.nameFly(name, color, 0.12);
-  }
-
-  /** Kahraman kartından sonra ekranın üstünden yükselip uçan isim şeridi. */
-  private nameFly(name: string, color: number, delay = 0) {
-    const c = new PIXI.Container();
-    const glow = new PIXI.Sprite(glowTex());
-    glow.anchor.set(0.5); glow.tint = color; glow.alpha = 0.7; glow.blendMode = 'add';
-    glow.width = glow.height = 520; glow.position.set(0, -14);
-    const bar = panel(700, 104, 0.92, 20);
-    bar.tint = color;
-    const label = txt(`★ ${truncateNick(name, 14)}`, 54, 0xffffff);
-    label.anchor.set(0.5); label.position.set(0, -18);
-    const sub = soft(upper(this.locale, t(this.locale, 'gifted')), 26, 0xfff3c4);
-    sub.anchor.set(0.5); sub.position.set(0, 30);
-    c.addChild(glow, bar, label, sub);
-    c.position.set(540, 1700);
-    this.centerLayer.addChild(c);
-    tweener.to(c, 'y', 1560, 1.5, { delay, ease: Ease.outCubic, id: 'fly-y' });
-    tweener.to(c, 'alpha', 0, 0.5, { delay: delay + 1.0, id: 'fly-a' });
-    tweener.to(c, 'scale', 1.08, 1.5, { delay, ease: Ease.outCubic, id: 'fly-s' });
-    tweener.to(glow, 'alpha', 0, 1.2, { delay: delay + 0.3, id: 'fly-g' });
-    setTimeout(() => c.destroy({ children: true }), (delay + 2.2) * 1000);
   }
 
   update(dt: number) {

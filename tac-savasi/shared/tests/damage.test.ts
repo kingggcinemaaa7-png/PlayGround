@@ -25,4 +25,13 @@ describe('damage math', () => {
   it('double stacks then caps', () => {
     expect(damageMultiplier({ streak: 0, table: cfg.streakBonus, cap: 3, hasDouble: true })).toBe(2);
   });
+  it('level bonus +12% per level', () => {
+    expect(damageMultiplier({ streak: 0, table: cfg.streakBonus, cap: 3, level: 1 })).toBe(1);
+    expect(damageMultiplier({ streak: 0, table: cfg.streakBonus, cap: 3, level: 2 })).toBeCloseTo(1.12);
+    expect(damageMultiplier({ streak: 0, table: cfg.streakBonus, cap: 3, level: 5 })).toBeCloseTo(1.48);
+  });
+  it('level bonus respects cap', () => {
+    const m = damageMultiplier({ streak: 50, table: cfg.streakBonus, cap: 3, hasDouble: true, level: 5 });
+    expect(m).toBe(3);
+  });
 });

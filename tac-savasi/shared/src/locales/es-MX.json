@@ -93,5 +93,17 @@
   "power.granted": "¡{power}!",
   "match.last10": "¡ÚLTIMOS 10!",
   "bridge.down": "¡SIN SEÑAL! EL JUEGO CONTINÚA",
-  "bridge.back": "¡CONECTADO DE NUEVO!"
+  "bridge.back": "¡CONECTADO DE NUEVO!",
+  "skill.join": "¡ÚNETE!",
+  "skill.lightning": "¡TORMENTA ELÉCTRICA!",
+  "skill.randomAttack": "¡ATAQUE CERTERO!",
+  "skill.powerAttack": "¡SUPERATAQUE!",
+  "skill.shieldAll": "¡CÚPULA!",
+  "skill.absorb": "¡ABSORCIÓN!",
+  "skill.healBig": "¡SALUD TOTAL!",
+  "skill.levelup": "¡SUBIÓ DE NIVEL!",
+  "skill.levelupBig": "¡GRAN NIVEL!",
+  "skill.speedSmall": "¡VELOCIDAD!",
+  "skill.speedBig": "¡SUPERVELOCIDAD!",
+  "skill.aoeAttack": "¡ATAQUE EN ÁREA!"
 }

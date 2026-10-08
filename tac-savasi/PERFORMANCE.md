@@ -181,3 +181,14 @@ Tarama sonucu bulunan, kanıtı doğrulanmış ve düzeltilmiş hatalar:
 Ek olarak **yörünge silahı** eklendi (bkz. BALANCE.md) ve ayrışma kuvveti yarıçapla
 tutarlı hale getirildi: ayrışma 52px < yarıçap 74px, aksi halde silah hiçbir rakibe
 ulaşamıyordu (test bunu yakaladı).
+
+### Bumerang turu (görsel şölen): havuzlanan her şey, kare başına sıfır tahsis
+
+- Mermi kuyrukları havuzdan: mermi başına 2 iz parçası oyun başında üretilir,
+  `syncBullets` içinde yalnızca konum/boy/alpha güncellenir.
+- Namlu parlaması teleport tespitiyle çalışır: havuz yuvası >240px "ışınlanırsa"
+  taze mermi demektir, tek bir `fx.burst(3 partikül)` çıkar.
+- Can halkası + rozetler her karede yeniden çizilir ama nesne üretilmez
+  (`hpRing.clear()` + yay; rozetlerde metin yalnızca değişince atanır).
+- Hediye kuyruğu: fırtınada kartlar 3,6sn arayla sırayla; kuyruk en fazla 8,
+  fazlası düşer (boss kartı öne geçer). Kart + isim şeridi sayısı sınırlı kalır.

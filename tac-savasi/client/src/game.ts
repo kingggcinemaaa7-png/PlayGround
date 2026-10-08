@@ -56,6 +56,8 @@ const TORNADO_TICKS = 3;
 const TORNADO_TICK_SEC = 1.2;
 const TORNADO_RADIUS = 75;
 const TORNADO_DMG = 15;
+/** Bu hasarın üstü arenada kocaman BOOM yazısı çıkarır. */
+const BOOM_DMG = 30;
 
 /** Takım vuruşu bekleme süresi (saniye) — spam'i engeller. */
 const TEAM_COOLDOWN_SEC = 12;
@@ -65,6 +67,16 @@ interface HitEvent {
   type: 'hit'; x: number; y: number; victim: string;
   dmg: number; crit: boolean; reflect: boolean;
 }
+
+/** Kahraman kartı kuyruk öğesi (hediye fırtınasında kartlar üst üste binmez). */
+interface HeroCardParams {
+  name: string; userId: string; desc: string; color: number;
+  icon?: string; effect?: string;
+}
+/** Kart ekranda ~3.55 sn kalır (çıkış 3.2 + 0.35 sönüm); sıradaki o zaman gelir. */
+const HERO_CARD_SEC = 3.6;
+/** Kuyruk taşmasın diye en fazla bu kadar kart bekler (fazlası düşer). */
+const HERO_QUEUE_MAX = 8;
 
 interface Cfg {
   fx: { heat: boolean; breath: boolean };
@@ -220,6 +232,8 @@ export class Game {
     this.ent = new EntityLayer();
     this.camera.addChild(this.ent.root);
     this.fx = new FX(this.camera);
+    // taze mermi namludan çıkarken kısa parlaması olur (kuyruklu yıldız doğumu)
+    this.ent.onMuzzle = (x, y) => { this.fx.burst(x, y, 0xfff6d8, 3, 130, 0.22, 15); };
     this.hud = new Hud();
     this.hud.initLayers();
     this.hud.facecamSlot.addChild(this.facecam.root);
@@ -501,6 +515,8 @@ export class Game {
 
   private renderWorld(dt: number, alpha: number) {
     const time = this.sim.time;
+    // sinematik kart kuyruğu: fırtınada kartlar sırayla, üst üste binmeden
+    this.flushHeroQueue(dt);
     // environment
     this.tideAmt = this.tideAmt + (Math.min(1, Math.max(0, (this.sim.tideUntil - time) / 14)) - this.tideAmt) * Math.min(1, dt * 2.4);
     this.stormAmt = this.stormAmt + (Math.min(1, Math.max(0, (this.sim.stormUntil - time) / 9)) - this.stormAmt) * Math.min(1, dt * 2.6);
@@ -574,7 +590,7 @@ export class Game {
     }
 
     // bullets + monsters + boss
-    this.ent.syncBullets(this.sim.bullets);
+    this.ent.syncBullets(this.sim.bullets, time);
     this.ent.syncMonsters(this.sim.monsters.map((m, i) => ({ id: String(i), x: m.x, y: m.y, hp: m.hp })), time);
     this.ent.syncBoss(time);
 
@@ -954,7 +970,12 @@ export class Game {
       if (k) {
         this.fx.confettiBurst(k.x, k.y, 90);
         this.fx.star(k.x, k.y, 0xffd23f, 12);
-        this.hud.heroCard(k.name, k.userId, `${fmtNum(this.locale, k.score)} ${t(this.locale, 'points')}`, 0xb8901a);
+        // boss kartı öne geçer (kuyruğun başına)
+        this.queueHeroCard({
+          name: k.name, userId: k.userId,
+          desc: `${fmtNum(this.locale, k.score)} ${t(this.locale, 'points')}`,
+          color: 0xb8901a,
+        }, true);
       }
       this.stats.bossKillSec = this.stats.bossKillSec < 0 ? Math.round(this.matchT) : this.stats.bossKillSec;
       audio.intense = false;
@@ -965,6 +986,27 @@ export class Game {
 
   /** Vuruş geri bildirimi (Faz 1.3): kıvılcım + hasar sayısı + ses + mikro sarsıntı. */
   private hitBudget = 0;
+  /** Sinematik kart kuyruğu: fırtınada kartlar sırayla görünür, üst üste binmez. */
+  private heroQueue: HeroCardParams[] = [];
+  private heroTimer = 0;
+  /** Son JOIN GAME! başlığı (katılma seli kısması). */
+  private lastJoinBanner = -99;
+  /** Karta al, gerekirse kuyruğa koy (boss kartı öne geçer). */
+  private queueHeroCard(p: HeroCardParams, priority = false) {
+    if (priority) this.heroQueue.unshift(p);
+    else this.heroQueue.push(p);
+    if (this.heroQueue.length > HERO_QUEUE_MAX) {
+      this.heroQueue.splice(priority ? 1 : 0, this.heroQueue.length - HERO_QUEUE_MAX);
+    }
+  }
+  /** Her karede sıradaki kartın zamanı geldiyse göster. */
+  private flushHeroQueue(dt: number) {
+    if (this.heroTimer > 0) { this.heroTimer -= dt; return; }
+    const p = this.heroQueue.shift();
+    if (!p) return;
+    this.hud.heroCard(p.name, p.userId, p.desc, p.color, p.icon, p.effect);
+    this.heroTimer = HERO_CARD_SEC;
+  }
   private onHitEvent(e: HitEvent) {
     // köprü/spam koruması: kare başına en fazla 8 kıvılcım
     if (this.hitBudget <= 0) return;
@@ -977,6 +1019,11 @@ export class Game {
     this.fx.hitSpark(x, y, col, e.crit ? 10 : 5);
     if (e.crit) { this.fx.dmgNum(x, y, Number(e.dmg) || 0, true); this.fx.punchZoom(1.05); }
     else if (Number(e.dmg) >= 8) this.fx.dmgNum(x, y, Number(e.dmg) || 0, false);
+    // ağır darbe: arenada kocaman BOOM yazısı (referans oyundaki etki)
+    if (Number(e.dmg) >= BOOM_DMG) {
+      this.fx.floatText(x, y - 70, 'BOOM!', 0xffa03a, 64, 110);
+      this.fx.shockwave(x, y, 0xffb03a, 130, 0.45);
+    }
     this.fx.shake.add(e.crit ? 6 : 1.6);
     audio.hit();
   }
@@ -1020,9 +1067,21 @@ export class Game {
     if (!this.ingestDedupe(e)) return;
     audio.ensure();
     if (e.type === 'join') {
+      const isNew = !this.sim.getAvatar(e.userId);
       const a = this.ensureAvatar(e.userId, e.name, e.pic);
       this.hud.pushJoin(e.name, e.userId);
       this.stats.viewers = Math.max(this.stats.viewers, this.sim.avatars.size);
+      // JOIN GAME!: ilk katılımda sinematik giriş (referans menü #1).
+      // Katılma selinde banner spam'i olmasın diye 6sn kısma var.
+      if (isNew && a.alive) {
+        if (this.sim.time - this.lastJoinBanner > 6) {
+          this.lastJoinBanner = this.sim.time;
+          this.skillShow('skill.join', 0x51d651, e.name);
+        }
+        this.fx.spawnRing(a.x, a.y, 0x51d651, 90);
+        this.fx.star(a.x, a.y - 40, 0x51d651, 8);
+        audio.ui();
+      }
       void a;
     } else if (e.type === 'follow') {
       const a = this.ensureAvatar(e.userId, e.name, e.pic);
@@ -1292,11 +1351,11 @@ export class Game {
     const color = tier === 5 ? 0x2b9bd9 : tier === 4 ? 0xff7b00 : tier === 3 ? 0xc084fc : tier === 2 ? 0x2fb85a : 0x3fb6d8;
     // kademe hediyesinde etiket zaten başlıkta var; sadece özel eylemlerde göster
     const effect = def && def.action !== 'tier' ? (Game.ACTION_LABEL[def.action] ?? def.action) : '';
-    this.hud.heroCard(
-      e.name, e.userId,
-      `${t(this.locale, `gift.t${tier}`)} ◆${fmtNum(this.locale, e.diamonds ?? 0)}${cm > 1 ? ` ×${cm}` : ''}`,
-      color, def?.icon ?? '🎁', effect,
-    );
+    this.queueHeroCard({
+      name: e.name, userId: e.userId,
+      desc: `${t(this.locale, `gift.t${tier}`)} ◆${fmtNum(this.locale, e.diamonds ?? 0)}${cm > 1 ? ` ×${cm}` : ''}`,
+      color, icon: def?.icon ?? '🎁', effect,
+    });
     if (tier >= 4) {
       this.fx.confettiBurst(a.x, a.y, tier === 5 ? 70 : 40);
       this.fx.punchZoom(1.04);
@@ -1315,6 +1374,31 @@ export class Game {
     }
     if (tier === 4) { this.meteorFx(e, a); this.grantPower(a, 'rage', true); }
     if (tier === 5) { this.tornadoFx(e, a); this.grantPower(a, 'ghost', true); this.sim.spawnClone(e.userId); }
+  }
+
+  /**
+   * Skill vitrini: büyük çizgi-roman başlığı + gönderen adı.
+   * Referans oyunun (AvatarBattle) mantığı: her hediye isimli bir SKILL'dir.
+   */
+  private skillShow(key: string, color: number, sender: string) {
+    const tr = this.secondLocale;
+    this.hud.skillBanner(
+      upper(this.locale, t(this.locale, key)),
+      this.dual
+        ? `${truncateNick(sender, 14)} · ${upper(tr, t(tr, key))}`
+        : truncateNick(sender, 14),
+      color,
+    );
+  }
+
+  /** Canlı düşmanlar (sahibi hariç, karıştırılmış). */
+  private foesOf(userId: string): AvatarState[] {
+    const list = [...this.sim.avatars.values()].filter((o) => o.alive && o.userId !== userId);
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
   }
 
   /** Kayıtlı hediye eylemi: hediye -> komut/güç eşlemesi buradan çalışır. */
@@ -1350,6 +1434,140 @@ export class Game {
         this.fx.floatText(a.x, a.y - 70, '+5', 0xc084fc, 36);
         break;
       case 'ignore': break; // sayaçlar işler, bedene dokunulmaz
+      // ---- isimli SKILL'ler (referans: AvatarBattle 12'li menü) ----
+      case 'lightning': { // LIGHTNING STORM: 5 yıldırım, rastgele düşmanlara
+        this.skillShow('skill.lightning', 0x6fc4ff, e.name);
+        const targets = this.foesOf(e.userId).slice(0, 5);
+        for (const o of targets) {
+          this.fx.lightning(o.x, 0, o.y);
+          this.sim.dealDamage(e.userId, o.userId, 25);
+          this.ent.avatar(o.userId).flashAmt = 1;
+        }
+        this.fx.flash(0.18);
+        this.fx.shake.add(10);
+        audio.thunder();
+        break;
+      }
+      case 'randomAttack': { // RANDOM ATTACK: tek rastgele düşmana suikast
+        const target = this.foesOf(e.userId)[0];
+        this.skillShow('skill.randomAttack', 0xff8a3c, e.name);
+        if (target) {
+          this.fx.lightning(target.x, 0, target.y);
+          this.fx.spawnRing(target.x, target.y, 0xff8a3c, 90);
+          this.sim.dealDamage(e.userId, target.userId, 70);
+          this.ent.avatar(target.userId).flashAmt = 1;
+          this.fx.hitStop(140);
+          this.fx.punchZoom(1.06);
+          this.fx.shake.add(12);
+          audio.thunder();
+        }
+        break;
+      }
+      case 'powerAttack': { // POWER ATTACK: en güçlü düşmana infaz vuruşu
+        const foes = this.foesOf(e.userId);
+        const best = foes.sort((p, q) => q.hp - p.hp)[0];
+        this.skillShow('skill.powerAttack', 0xff3b5c, e.name);
+        if (best) {
+          this.fx.meteor(best.x, best.y);
+          this.sim.dealDamage(e.userId, best.userId, 120);
+          this.ent.avatar(best.userId).flashAmt = 1;
+          this.fx.hitStop(180);
+          this.fx.punchZoom(1.08);
+          this.fx.flash(0.22);
+          this.fx.shake.add(14);
+          audio.meteor();
+        }
+        break;
+      }
+      case 'shieldAll': { // SHIELD DEFENSE: sahip + yakın dostlara kubbe
+        this.skillShow('skill.shieldAll', 0x39d0ff, e.name);
+        const covered = [a];
+        for (const o of this.sim.avatars.values()) {
+          if (!o.alive || o.userId === e.userId) continue;
+          if (Math.hypot(o.x - a.x, o.y - a.y) > 220) continue;
+          covered.push(o);
+        }
+        for (const o of covered) {
+          o.shieldUntil = Math.max(o.shieldUntil, T + 8);
+          this.fx.spawnRing(o.x, o.y, 0x39d0ff, 70);
+        }
+        this.fx.floatText(a.x, a.y - 70, '🛡️', 0x39d0ff, 44);
+        audio.ui();
+        break;
+      }
+      case 'absorb': { // ABSORB (Adsorpsiyon): hasarı cana çevirme aurası
+        this.skillShow('skill.absorb', 0xc44dff, e.name);
+        a.absorbUntil = T + 10;
+        this.fx.spawnRing(a.x, a.y, 0xc44dff, 80);
+        this.fx.burst(a.x, a.y, 0xc44dff, 14, 200, 0.6, 20, 0, -60);
+        this.fx.floatText(a.x, a.y - 70, '🌀', 0xc44dff, 40);
+        audio.ui();
+        break;
+      }
+      case 'healBig': { // LARGE HEALTH: tam can + yeşil patlama
+        this.skillShow('skill.healBig', 0x2fb85a, e.name);
+        a.hp = a.maxHp;
+        this.fx.floatText(a.x, a.y - 70, `✚${a.maxHp}`, 0x2fb85a, 38);
+        this.fx.burst(a.x, a.y, 0x2fb85a, 18, 240, 0.7, 22, 0, -60);
+        this.fx.spawnRing(a.x, a.y, 0x2fb85a, 80);
+        audio.fanfare();
+        break;
+      }
+      case 'levelup': { // LEVEL UP (küçük): +1 seviye
+        const lv = this.sim.levelUp(e.userId, 1);
+        this.skillShow('skill.levelup', 0xffd23f, e.name);
+        if (lv > 0) {
+          this.fx.floatText(a.x, a.y - 70, `⭐Lv${lv}`, 0xffd23f, 40);
+          this.fx.star(a.x, a.y - 40, 0xffd23f, 10);
+          this.fx.spawnRing(a.x, a.y, 0xffd23f, 80);
+          audio.fanfare();
+        }
+        break;
+      }
+      case 'levelupBig': { // LEVEL UP (büyük): +2 seviye
+        const lv = this.sim.levelUp(e.userId, 2);
+        this.skillShow('skill.levelupBig', 0x6fb7ff, e.name);
+        if (lv > 0) {
+          this.fx.floatText(a.x, a.y - 70, `⭐Lv${lv}`, 0x6fb7ff, 44);
+          this.fx.star(a.x, a.y - 40, 0x6fb7ff, 14);
+          this.fx.spawnRing(a.x, a.y, 0x6fb7ff, 100);
+          this.fx.confettiBurst(a.x, a.y - 40, 30);
+          audio.fanfare();
+        }
+        break;
+      }
+      case 'speedSmall': { // SPEED UP (hafif): 6sn hız
+        this.skillShow('skill.speedSmall', 0x51d651, e.name);
+        a.speedUntil = T + 6;
+        this.fx.floatText(a.x, a.y - 70, '🥾💨', 0x51d651, 38);
+        audio.ui();
+        break;
+      }
+      case 'speedBig': { // SPEED UP (mükemmel): 15sn hız + iz
+        this.skillShow('skill.speedBig', 0xff9f1c, e.name);
+        a.speedUntil = T + 15;
+        this.fx.floatText(a.x, a.y - 70, '🚀💨', 0xff9f1c, 42);
+        this.fx.burst(a.x, a.y, 0xff9f1c, 12, 260, 0.5, 18);
+        audio.streak(15);
+        break;
+      }
+      case 'aoeAttack': { // AOE ATTACK: arena geneli halka hasar
+        this.skillShow('skill.aoeAttack', 0xff6a1e, e.name);
+        this.fx.shockwave(540, 960, 0xff6a1e, 700, 0.8);
+        this.fx.shockwave(540, 960, 0xffd23f, 500, 0.6);
+        this.fx.flash(0.25);
+        this.fx.hitStop(150);
+        this.fx.shake.add(16);
+        for (const o of this.sim.avatars.values()) {
+          if (o.userId === e.userId || !o.alive) continue;
+          this.sim.dealDamage(e.userId, o.userId, 35);
+          this.ent.avatar(o.userId).flashAmt = 1;
+        }
+        audio.meteor();
+        audio.intense = true;
+        audio.syncMusicLayers();
+        break;
+      }
       default:
         // rage | ghost | vamp | giant | reflect | chain | frost | clone
         if (action === 'clone') this.sim.spawnClone(e.userId);
@@ -1409,6 +1627,10 @@ export class Game {
     meteor: 'METEORO', tornado: 'TORNADO', heal: 'VIDA', speed: 'VELOCIDAD',
     streak5: 'RACHA +5', rage: 'ÖFKE', ghost: 'HAYALET', vamp: 'VAMPİR',
     giant: 'DEV', reflect: 'YANSITMA', chain: 'ZİNCİR', frost: 'DONMA', clone: 'KLON',
+    lightning: 'YILDIRIM', randomAttack: 'SUİKAST', powerAttack: 'SÜPER SALDIRI',
+    shieldAll: 'KUBBE', absorb: 'EMİLİM', healBig: 'TAM CAN',
+    levelup: 'SEVİYE+1', levelupBig: 'SEVİYE+2',
+    speedSmall: 'HIZ', speedBig: 'SÜPER HIZ', aoeAttack: 'ALAN SALDIRISI',
   };
   /** Güç vitrini: renk + ikon + süre + parçacık stili. */
   static readonly POWER_META: Record<string, { color: number; icon: string; label: string; total: number; fx: string }> = {

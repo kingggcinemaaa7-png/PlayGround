@@ -4,7 +4,7 @@ import * as PIXI from 'pixi.js';
 import {
   ringFrameTex, spikesTex, crownTex, discTex, glowTex,
   krakenTex, tentacleTex, clawTex, crabTex, sparkTex,
-  boomerangTex, chainOrbTex, badgeTex, orbitStarTex, orbitTrailTex,
+  boomerangTex, chainOrbTex, badgeTex, orbitTrailTex,
 } from './textures.js';
 import { tweener, Ease } from './tween.js';
 import { truncateNick, upper } from '@tac/shared';
@@ -24,6 +24,7 @@ export interface AvatarLike {
   fireCd: number; respawnAt: number;
   aimX?: number; aimY?: number; aimT?: number;
   orbAngle: number;
+  level: number;
 }
 
 export class AvatarView {
@@ -34,8 +35,6 @@ export class AvatarView {
   pic = new PIXI.Sprite(PIXI.Texture.WHITE);
   crown = new PIXI.Sprite(assets.texOr('avatars.crown', crownTex));
   assetV = -1; // bumped by EntityLayer when real art lands
-  hpBg = new PIXI.Graphics();
-  hp = new PIXI.Graphics();
   nameT = new PIXI.Text({ text: '', style: { fontFamily: '"Trebuchet MS", system-ui, sans-serif', fontSize: 21, fill: 0xffffff, fontWeight: '700', stroke: { color: 0x12081f, width: 4, join: 'round' } } });
   pill = new PIXI.Container();
   pillT = new PIXI.Text({ text: '', style: { fontFamily: '"Trebuchet MS", system-ui, sans-serif', fontSize: 17, fill: 0x12081f, fontWeight: '800' } });
@@ -62,9 +61,6 @@ export class AvatarView {
   hpRing = new PIXI.Graphics();
   /** güç/hız/seri rozetleri (avatarın üstünde) */
   badges = new PIXI.Container();
-  /** silah rengi: güç/seri durumuna göre değişir */
-  orbHue = '#ffd23f';
-  orbSpokes = 5;
   flashAmt = 0;
   hitOff = { x: 0, y: 0 };
   /** ölüm animasyonu: 0 = canlı, >0 ölüm zamanlayıcısı, -1 = hayalet/corpse */
@@ -82,7 +78,7 @@ export class AvatarView {
     this.pillT.resolution = 2;
     this.shadow.ellipse(0, 34, 30, 11).fill({ color: 0x000000, alpha: 0.3 });
     this.pic.anchor.set(0.5);
-    this.pic.width = this.pic.height = 56;
+    this.pic.width = this.pic.height = 50;   // halka (R=42) dışında kalsın diye küçük
     this.ring.anchor.set(0.5);
     this.ring.width = this.ring.height = 66;
     this.spikes.anchor.set(0.5);
@@ -130,18 +126,20 @@ export class AvatarView {
       this.orbTrails.push(glow);
       this.orbChain.push(chain);
     }
+    // Katman sırası: profil ÖNCE, can halkası SONRA çizilir → halka fotoğrafın
+    // kenarının ÜSTÜNE biner, fotoğraf halkanın merkezinde kalır.
     this.root.addChild(
       this.shadow, this.aura, this.tornadoRing, this.spikes, this.ring,
-      this.orbit, this.aim, this.badges, this.hpRing, this.pic,
-      this.hpBg, this.hp, this.crown, this.pill, this.streakT, this.nameT,
+      this.orbit, this.aim, this.badges, this.pic,
+      this.hpRing, this.crown, this.pill, this.streakT, this.nameT,
     );
   }
 
   /**
-   * Yörünge silahını çiz: yıldızlar fotoğrafın etrafında döner, arkalarında
-   * parlar iz bırakır ve hafifçe zıplar (canlılık).
+   * Yörünge silahını çiz: bumerang paletleri fotoğrafın etrafında döner,
+   * arkalarında 9 topluk ışık zinciri bırakır.
    */
-  syncOrbit(count: number, radius: number, angle: number, time: number, scale: number, hue: string, tint: number) {
+  syncOrbit(count: number, radius: number, angle: number, time: number, scale: number, tint: number) {
     for (let i = 0; i < this.orbStars.length; i++) {
       const g = this.orbit.children[i] as PIXI.Container;
       if (i >= count || count <= 0) { g.visible = false; continue; }
@@ -179,27 +177,27 @@ export class AvatarView {
   }
   hideOrbit() { for (const g of this.orbit.children) g.visible = false; }
 
-  /** Can halkası: profil fotoğrafını saran yay (yeşil -> sarı -> kırmızı). */
-  syncHpRing(pct: number, shield: boolean, time: number) {
+  /**
+   * Can göstergesi: profil fotoğrafını saran YEŞİL HALKA + etrafını kaplayan
+   * ışık çemberi. Referans görüntüdeki gibi: kalın yeşil çember, içinde profil,
+   * çemberin dışında yumuşak yeşil parıltı. Yay uzunluğu can oranıdır.
+   * Can düştükçe halka kısalır ve parıltı soluklaşır (okunurluk için).
+   */
+  /**
+   * Can göstergesi: profil fotoğrafının ÇEVRESİNDE, ondan AYRI duran yeşil
+   * halka (referans görüntüdeki gibi). Halka fotoğrafın dış çapından büyük,
+   * aralarında boşluk var — fotoğrafın üstüne binmez.
+   * Can oranı = halkanın ne kadarının parlak yeşil olduğu.
+   */
+  syncHpRing(pct: number, time: number) {
     const g = this.hpRing;
     g.clear();
     const p = Math.max(0, Math.min(1, pct));
-    const col = shield ? 0x7fe8ff : p > 0.55 ? 0x4be07a : p > 0.28 ? 0xffd23f : 0xff3b5c;
-    const R = 34;
-    g.circle(0, 0, R).stroke({ color: 0x12081f, width: 8, alpha: 0.6 });
-    if (p > 0.001) {
-      const start = -Math.PI / 2;
-      const end = start + Math.PI * 2 * p;
-      g.arc(0, 0, R, start, end).stroke({ color: col, width: 6, alpha: 0.98 });
-      g.circle(Math.cos(end) * R, Math.sin(end) * R, 4.5).fill({ color: 0xffffff, alpha: 0.95 });
-    }
-    if (p <= 0.28) {
-      const k = 0.5 + Math.sin(time * 9) * 0.5;
-      g.circle(0, 0, R + 7).stroke({ color: 0xff3b5c, width: 3, alpha: 0.18 + k * 0.5 });
-    }
-    if (shield) {
-      g.circle(0, 0, R + 10).stroke({ color: 0x39d0ff, width: 2, alpha: 0.3 + Math.sin(time * 7) * 0.25 });
-    }
+    const R = 42;
+    // sadece tek solid yeşil çember, can oranı parlaklığıyla değişir
+    const alpha = 0.35 + p * 0.65;
+    const pulse = 0.92 + Math.sin(time * 2.2) * 0.08;
+    g.circle(0, 0, R).stroke({ color: 0x3ddc84, width: 7, alpha: alpha * pulse });
   }
 
   /** Avatarın üstünde küçük rozetler (hız / öfke / seri / kalkan). */
@@ -236,6 +234,12 @@ export class EntityLayer {
   avatars = new Map<string, AvatarView>();
   bullets: PIXI.Sprite[] = [];
   bulletGlow: PIXI.Sprite[] = [];
+  /** her mermi için 2 kuyruk parçası (kuyruklu yıldız izi), havuzdan */
+  bulletTrail: PIXI.Sprite[][] = [];
+  /** havuz yuvasının bir önceki karesi (teleport = taze mermi = namlu parlaması) */
+  private bulletPrev: { x: number; y: number }[] = [];
+  /** taze mermide çağrılır (Game namlu parlaması için bağlar) */
+  onMuzzle: ((x: number, y: number, ang: number) => void) | null = null;
   monsters = new Map<string, { root: PIXI.Container; spr: PIXI.Sprite; bob: number }>();
   bossRoot = new PIXI.Container();
   private bossAssetV = -1;
@@ -263,6 +267,16 @@ export class EntityLayer {
       s.width = 22; s.height = 14;
       this.bullets.push(s);
       this.root.addChild(s);
+      // kuyruk: merminin arkasına uzanan 2 sönümlü parça
+      const segs: PIXI.Sprite[] = [];
+      for (let k = 0; k < 2; k++) {
+        const tr = new PIXI.Sprite(orbitTrailTex());
+        tr.anchor.set(1, 0.5); tr.blendMode = 'add'; tr.visible = false;
+        this.root.addChild(tr);
+        segs.push(tr);
+      }
+      this.bulletTrail.push(segs);
+      this.bulletPrev.push({ x: 0, y: 0 });
     }
     for (let i = 0; i < 12; i++) {
       const spr = new PIXI.Sprite(crabTex(true));
@@ -323,8 +337,6 @@ export class EntityLayer {
     v.pic.rotation = Math.sin(time * 3) * 0.06;
     v.ring.clear();
     v.ring.circle(0, 0, 28 + Math.sin(time * 6) * 2).stroke({ color: 0xb9a7ff, width: 3, alpha: 0.85 });
-    v.hp.clear();
-    v.hp.roundRect(-20, 30, 40 * Math.max(0, m.hp / m.maxHp), 5, 2).fill({ color: 0xb9a7ff, alpha: 0.95 });
   }
 
   avatar(userId: string): AvatarView {
@@ -377,8 +389,6 @@ export class EntityLayer {
         v.hpRing.clear();
         v.syncBadges([], opts.time);
         v.ring.alpha = 0.25;
-        v.hp.clear();
-        v.hpBg.clear();
         v.spikes.visible = false;
         v.crown.visible = false;
         v.pill.visible = false;
@@ -467,14 +477,15 @@ export class EntityLayer {
     }
 
     // --- can halkası: profili saran gösterge (yeşil -> sarı -> kırmızı) ---
-    v.syncHpRing(a.hp / a.maxHp, opts.time < a.shieldUntil, opts.time);
+    v.syncHpRing(a.hp / a.maxHp, opts.time);
 
-    // --- rozetler: hız / öfke / kalkan / seri ---
+    // --- rozetler: hız / öfke / kalkan / seri / seviye ---
     const bl: { icon: string; color: number }[] = [];
     if (opts.time < a.speedUntil) bl.push({ icon: '⚡', color: 0x2b9bd9 });
     if (opts.time < a.rageUntil) bl.push({ icon: '🔥', color: 0xff5a1e });
     if (opts.time < a.shieldUntil) bl.push({ icon: '🛡', color: 0x39d0ff });
     if (a.streak >= 5) bl.push({ icon: '⚔', color: a.streak >= 30 ? 0xffd23f : 0xc084fc });
+    if (a.level > 1) bl.push({ icon: '⭐', color: 0xffd23f });
     v.syncBadges(bl.slice(0, 4), opts.time);
 
     // --- yörünge silahı: güç durumuna göre renk değiştirir ---
@@ -484,7 +495,7 @@ export class EntityLayer {
     const orbTint = rage ? 0xff5b3a : shielded ? 0x6fd0ff : orbGiant ? 0xfff0b0 : 0xffb43c;
     v.syncOrbit(
       this.orbitCount, this.orbitRadius * (orbGiant ? 1.5 : 1),
-      a.orbAngle, opts.time, orbGiant ? 1.5 : 1, '#ffd23f', orbTint,
+      a.orbAngle, opts.time, orbGiant ? 1.5 : 1, orbTint,
     );
 
     // nişan: hedefe kilitlenen hat + nişangâh (Faz 2.1)
@@ -517,13 +528,8 @@ export class EntityLayer {
       v.spikes.scale.set(0.62 + Math.sin(opts.time * 4) * 0.03);
     } else v.spikes.visible = false;
 
-    // hp bar
-    const pct = Math.max(0, Math.min(1, a.hp / a.maxHp));
-    v.hpBg.clear();
-    v.hpBg.roundRect(-26, 40, 52, 7, 3).fill({ color: 0x12081f, alpha: 0.6 });
-    v.hp.clear();
-    const col = pct > 0.5 ? 0x4be07a : pct > 0.25 ? 0xffd23f : 0xff3b5c;
-    v.hp.roundRect(-25, 41, 50 * pct, 5, 2).fill({ color: col, alpha: 0.98 });
+    // Can profili saran yeşil halkada gösteriliyor (syncHpRing); avatarın
+    // üstündeki yatay can çubuğu kaldırıldı — aynı bilgiydi ve gereksizdi.
 
     // name + streak
     v.nameT.text = truncateNick(a.name, 13);
@@ -611,20 +617,45 @@ export class EntityLayer {
     v.pill.position.set(0, y + 22);
   }
 
-  syncBullets(list: { x: number; y: number; vx: number; vy: number }[]) {
+  syncBullets(list: { x: number; y: number; vx: number; vy: number }[], time: number) {
     const n = Math.min(list.length, this.poolSize);
     for (let i = 0; i < this.poolSize; i++) {
       const s = this.bullets[i], g = this.bulletGlow[i];
+      const segs = this.bulletTrail[i];
       if (i < n) {
         const b = list[i];
         s.visible = true; g.visible = true;
         const ang = Math.atan2(b.vy, b.vx);
+        const prev = this.bulletPrev[i];
+        // havuz yuvası uzak bir noktaya "ışınlandıysa" bu taze bir mermidir
+        if (Math.hypot(b.x - prev.x, b.y - prev.y) > 240) this.onMuzzle?.(b.x, b.y, ang);
+        prev.x = b.x; prev.y = b.y;
+        // çekirdek: hızlı nabızla parlayan kuyruklu yıldız başı
+        const pulse = 1 + Math.sin(time * 18 + i * 1.7) * 0.14;
         s.position.set(b.x, b.y); s.rotation = ang;
-        s.width = 24; s.height = 13;
+        s.width = 24 * pulse; s.height = 13 * pulse;
+        s.alpha = 0.92;
+        // hale: başın üstünde büyük yumuşak ışık
         g.position.set(b.x - Math.cos(ang) * 10, b.y - Math.sin(ang) * 10);
         g.rotation = ang;
-        g.width = 54; g.height = 28;
-      } else { s.visible = false; g.visible = false; }
+        g.width = 54 * pulse; g.height = 28 * pulse;
+        g.alpha = 0.75 + Math.sin(time * 18 + i) * 0.2;
+        // kuyruk: arkaya uzanan 2 sönümlü parça
+        const cx = Math.cos(ang), cy = Math.sin(ang);
+        for (let k = 0; k < segs.length; k++) {
+          const tr = segs[k];
+          tr.visible = true;
+          const back = 26 + k * 30;
+          tr.position.set(b.x - cx * back, b.y - cy * back);
+          tr.rotation = ang;
+          const w = (64 - k * 22) * pulse;
+          tr.width = w; tr.height = w * 0.32;
+          tr.alpha = 0.55 - k * 0.22;
+        }
+      } else {
+        s.visible = false; g.visible = false;
+        for (const tr of segs) tr.visible = false;
+      }
     }
   }
 

@@ -25,6 +25,9 @@
 | Mutators | double / goldrain (monster pts x2) / speed (×1.3), one per match |
 | Goal meter | start 500, ×1.5 each fill → 10s GOLD RAIN (kill score x2) |
 | Commands CD | shield 10s dur/20s cd; fire-ring 12 bullets/10s cd |
+| Level | LEVEL UP +1/+2 (max 5): kalıcı +25 maxHp, seviye başına +%12 hasar; tavan x3 dahil |
+| Absorb | ABSORB 10s: gelen hasar ×0.5, diğer yarısı cana dönüşür |
+| Skill banners | her isimli skill büyük çizgi-roman başlığı + sinematik (JOIN 6sn kısma) |
 
 Telemetry CSV per match:
 `match,viewers,gifts(T1/..T5),goalFillSec,mercyRevives,bossKillSec,avgWatchSec`
@@ -33,13 +36,17 @@ Telemetry CSV per match:
 a close proxy for TikTok's own engagement window.
 
 
-## Yörünge silahı (2026-10)
+## Yörünge silahı (2026-10, bumerang + zincir)
 
-Profil fotoğrafının etrafında dönen yıldızlar. Varsayılan: **2 yıldız, 74px yarıçap,
-6 hasar, 0.75sn bekleme** (config: `orbit`).
+Profil fotoğrafının etrafında dönen bumerang paletleri + her paletin arkasında
+9 toplu ışık zinciri. Varsayılan: **2 palet, 74px yarıçap, 6 hasar, 0.75sn bekleme**
+(config: `orbit`).
 
 - Dönüş hızı: öfkede ×1.5, devde ×1.35 ve yarıçap ×1.5.
-- Bekleme süresi oyuncu başına: her yıldız için ayrı değil, oyuncu başına tek sayaç.
-- Yıldızlar **hasar tavanına (x3) tabidir**.
+- Bekleme süresi oyuncu başına: her palet için ayrı değil, oyuncu başına tek sayaç.
+- Paletler **hasar tavanına (x3) tabidir**.
+- 30+ hasar veren her vuruş arenada **BOOM!** yazısı + şok dalgası çıkarır.
 - ÖNEMLİ: oyuncuların ayrışma mesafesi (52px) yarıçaptan (74px) **küçük olmalıdır**;
-  aksi halde ayrışma kuvveti rakibi yıldızların ulaşamayacağı uzağa iter ve silah işlemez.
+  aksi halde ayrışma kuvveti rakibi paletlerin ulaşamayacağı uzağa iter ve silah işlemez.
+- Hediye kartları kuyrukludur: fırtınada en fazla 8 kart bekler, 3,6sn arayla sırayla
+  görünür; boss kartı öne geçer.
