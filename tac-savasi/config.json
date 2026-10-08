@@ -1,0 +1,131 @@
+{
+  "match": {
+    "durationSec": 1500,
+    "presets": [
+      90,
+      300,
+      1500
+    ],
+    "introSec": 3,
+    "endCountdownSec": 10,
+    "tableSec": 10,
+    "awardsSec": 8,
+    "podiumSec": 7,
+    "maxFighters": 60
+  },
+  "avatar": {
+    "hp": 100,
+    "dmg": 10,
+    "speed": 55,
+    "fireInterval": 0.55,
+    "range": 190,
+    "bulletSpeed": 260,
+    "respawnSec": 3,
+    "respawnHpPct": 0.5,
+    "shieldSec": 2
+  },
+  "streakBonus": [
+    {
+      "min": 50,
+      "mult": 1.6
+    },
+    {
+      "min": 30,
+      "mult": 1.5
+    },
+    {
+      "min": 15,
+      "mult": 1.25
+    },
+    {
+      "min": 5,
+      "mult": 1.1
+    }
+  ],
+  "damageCap": 3.0,
+  "scores": {
+    "kill": 10,
+    "monster": 3,
+    "boss": 50
+  },
+  "powerups": {
+    "durationSec": 15,
+    "fuerzaMult": 1.5,
+    "velocidadMult": 1.7,
+    "poisonDps": 16,
+    "poisonRadius": 26,
+    "healPerSec": 10
+  },
+  "mercy": {
+    "minStreak": 10,
+    "windowSec": 10,
+    "reviveHpPct": 0.5,
+    "timeoutHpPct": 0.25
+  },
+  "gifts": {
+    "comboWindowSec": 10,
+    "goalStart": 500,
+    "goalGrowth": 1.5,
+    "goldRainSec": 10
+  },
+  "likes": {
+    "perBoost": 10,
+    "boostSec": 5
+  },
+  "monsters": {
+    "everySec": 20,
+    "castleHp": 800
+  },
+  "boss": {
+    "fractions": [
+      0.1,
+      0.3,
+      0.5,
+      0.7,
+      0.88
+    ],
+    "baseHp": 1200,
+    "hpPerFighter": 60,
+    "specialEverySec": 7,
+    "trapSec": 4,
+    "contactDps": 15
+  },
+  "env": {
+    "tideEverySec": 48,
+    "tideDurSec": 14,
+    "stormEverySec": 55,
+    "stormDurSec": 9,
+    "lightningEverySec": 0.7
+  },
+  "cooldowns": {
+    "shieldSec": 20,
+    "shieldDurSec": 10,
+    "fireRingSec": 10,
+    "fireRingBullets": 12
+  },
+  "locale": {
+    "default": "es-MX",
+    "dual": true,
+    "second": "tr-TR"
+  },
+  "arena": {
+    "list": [
+      "beach",
+      "volcano",
+      "ice",
+      "night-forest",
+      "sky-island"
+    ],
+    "width": 1080,
+    "height": 1920
+  },
+  "facecam": {
+    "stripPx": 100,
+    "mirror": true
+  },
+  "admin": {
+    "enabled": true,
+    "hotkey": "F1",
+    "defaultBridge": "ws://localhost:8081"
+  }
+}

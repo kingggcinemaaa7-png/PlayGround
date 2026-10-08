@@ -1,0 +1,23 @@
+{
+  "name": "@tac/client",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "assets:sync": "node ../tools/sync-assets.mjs",
+    "predev": "npm run assets:sync",
+    "dev": "vite --port 3002",
+    "prebuild": "npm run assets:sync",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview --port 3002"
+  },
+  "dependencies": {
+    "@tac/shared": "1.0.0",
+    "gsap": "^3.12.5",
+    "pixi.js": "^8.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  }
+}

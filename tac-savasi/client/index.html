@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Taç Savaşı — TikTok LIVE Arena</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06233b; overflow: hidden; }
+  #wrap { position: fixed; inset: 0 330px 0 0; display: flex; align-items: center; justify-content: center; }
+  body.clean #wrap { inset: 0; }
+  canvas { border-radius: 12px; box-shadow: 0 20px 80px rgba(0,0,0,.5); }
+  #mock { position: fixed; left: 8px; bottom: 8px; z-index: 10; display: none; gap: 6px; flex-wrap: wrap; max-width: 46ch; }
+  #mock button { font: 600 13px system-ui; padding: 6px 10px; border-radius: 8px; border: 1px solid #fff3; background: #0b3b5ecc; color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="wrap"></div>
+<div id="mock"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

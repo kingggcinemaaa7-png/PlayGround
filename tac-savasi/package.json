@@ -1,0 +1,32 @@
+{
+  "name": "tac-savasi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ta\u00e7 Sava\u015f\u0131 \u2014 TikTok LIVE arena game",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:client": "npm run dev --workspace=client",
+    "dev:server": "npm run dev --workspace=server",
+    "build": "npm run build --workspace=shared && npm run build --workspace=server && npm run build --workspace=client",
+    "test": "npm run test --workspace=shared && npm run test --workspace=server",
+    "mock:storm": "npm run mock --workspace=server -- storm --viewers 100 --gifts 200",
+    "soak": "node tools/soak.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p client/tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "check": "npm run lint && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.71.1"
+  },
+  "type": "module"
+}
