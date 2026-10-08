@@ -11,11 +11,78 @@
   canvas { border-radius: 12px; box-shadow: 0 20px 80px rgba(0,0,0,.5); }
   #mock { position: fixed; left: 8px; bottom: 8px; z-index: 10; display: none; gap: 6px; flex-wrap: wrap; max-width: 46ch; }
   #mock button { font: 600 13px system-ui; padding: 6px 10px; border-radius: 8px; border: 1px solid #fff3; background: #0b3b5ecc; color: #fff; cursor: pointer; }
+  /* Boot splash: visible from the first paint, so the page is never a bare blue screen */
+  #tac-splash { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(120% 90% at 50% 30%, #0e4a6b 0%, #06233b 60%, #041627 100%); color: #fff;
+    font-family: "Trebuchet MS", system-ui, sans-serif; text-align: center; }
+  #tac-splash.hidden { display: none; }
+  .tac-splash-logo { font: 900 64px "Arial Black", Impact, sans-serif; color: #ffd23f;
+    text-shadow: 0 4px 0 #7a4d00, 0 10px 30px #000; letter-spacing: 2px; }
+  .tac-splash-sub { margin-top: 10px; font-size: 20px; color: #bfe6ff; }
+  .tac-splash-spin { width: 54px; height: 54px; margin: 26px auto 0; border-radius: 50%;
+    border: 6px solid #ffffff2e; border-top-color: #ffd23f; animation: tsspin 0.9s linear infinite; }
+  @keyframes tsspin { to { transform: rotate(360deg); } }
+  .tac-splash-card { max-width: 640px; padding: 28px; background: #0a1428ee; border: 1px solid #33406a; border-radius: 16px; }
+  .tac-splash-err { margin: 14px 0 8px; font-size: 17px; color: #ff8fa3; word-break: break-word; }
+  .tac-splash-diag { text-align: left; font: 13px/1.6 ui-monospace, Consolas, monospace; color: #9fe3ff;
+    background: #060c18; border-radius: 8px; padding: 10px 14px; white-space: pre-wrap; }
+  .tac-splash-hint { margin-top: 10px; font-size: 14px; color: #cfe3ff; }
+  .tac-splash-btn { margin-top: 14px; padding: 10px 22px; font-size: 16px; border-radius: 10px;
+    border: 1px solid #ffd23f; background: #7a5b00; color: #fff; cursor: pointer; }
 </style>
 </head>
 <body>
+<div id="tac-splash">
+  <div>
+    <div class="tac-splash-logo">TAÇ SAVAŞI</div>
+    <div class="tac-splash-sub">Arena yükleniyor…</div>
+    <div class="tac-splash-spin"></div>
+  </div>
+</div>
 <div id="wrap"></div>
 <div id="mock"></div>
+<script>
+  // Boot watchdog with three states:
+  //  1. module never ran      -> JS failed to load (network/MIME) -> fatal card
+  //  2. boot started, slow    -> still loading on a slow link -> progress card
+  //  3. first frame rendered  -> splash hides, nothing to do
+  window.__tacBooted = false;
+  window.__tacBootStage = null;
+  var __tacT0 = Date.now();
+  function __tacDiag() {
+    var gl = 'unknown';
+    try {
+      var c = document.createElement('canvas');
+      gl = (c.getContext('webgl2') || c.getContext('webgl')) ? 'yes' : 'NO WEBGL';
+    } catch (e) { gl = 'error'; }
+    return 'WebGL: ' + gl + '\nURL: ' + location.href +
+      '\nAsama: ' + (window.__tacBootStage || 'modül hiç çalışmadı') +
+      '\nSüre: ' + Math.round((Date.now() - __tacT0) / 1000) + 'sn';
+  }
+  function __tacCard(title, hint) {
+    return '<div class="tac-splash-card"><div class="tac-splash-logo">TAÇ SAVAŞI</div>' +
+      '<div class="tac-splash-err">' + title + '</div>' +
+      '<pre class="tac-splash-diag">' + __tacDiag() + '</pre>' +
+      '<div class="tac-splash-hint">' + hint + '</div>' +
+      '<button class="tac-splash-btn" onclick="location.reload()">Yeniden dene</button></div>';
+  }
+  setTimeout(function () {
+    if (window.__tacBooted) return;
+    var splash = document.getElementById('tac-splash');
+    if (!splash || splash.classList.contains('hidden')) return;
+    if (!window.__tacBootStage) {
+      // the module script itself never executed
+      splash.innerHTML = __tacCard(
+        'Oyun 20 saniyede açılmadı (JS başlamadı).',
+        'Dosyalar bu adrese ulaşmıyor olabilir (tünel koptu / yanlış adres / engelli dosya). Önce adresi ve bağlantıyı kontrol et, sonra <b>?safemode=1</b> ile dene.');
+    } else {
+      // module runs, boot is crawling (slow link) — say so, keep waiting
+      splash.innerHTML = __tacCard(
+        'Yükleme sürüyor (yavaş bağlantı olabilir)…',
+        'Oyun arkada açılmaya devam ediyor; bu ekran ilk karede kapanır. Beklemek istemezsen sayfayı yenile ya da <b>?safemode=1</b> ile dene.');
+    }
+  }, 20000);
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -31,9 +31,22 @@ export interface AvatarState {
   gifts: number; diamonds: number; score: number; poisonTick: number;
   shieldUntil: number; speedUntil: number; doubleUntil: number;
   fuerzaUntil: number; poisonUntil: number; healUntil: number;
+  rageUntil: number; ghostUntil: number; vampUntil: number;
+  giantUntil: number; giantActive: boolean;
+  reflectUntil: number; chainUntil: number;
   trappedUntil: number; fireCd: number; likeCount: number;
+  /** yörünge silahı: yıldızların açısal konumu (radyan) ve faz hız çarpanı */
+  orbAngle: number; orbCd: number;
   lastActive: number; powerLabel?: string;
   orbitR: number; orbitPhase: number;
+  /** son atışın nişan yönü (radyan) + hazırlık t=1 ateşe yaklaşıyor */
+  aimX: number; aimY: number; aimT: number;
+}
+
+export interface Minion {
+  id: string; owner: string;
+  x: number; y: number; hp: number; maxHp: number;
+  until: number; cd: number;
 }
 
 export interface SimConfig {
@@ -41,6 +54,8 @@ export interface SimConfig {
   fireInterval: number; range: number; bulletSpeed: number;
   respawnSec: number; respawnHpPct: number; shieldSec: number;
   damageCap: number;
+  /** yörünge silahı: kaç yıldız, yarıçap, tur/sn, hasar, bekleme */
+  orbit: { count: number; radius: number; spin: number; dmg: number; cd: number };
   streakBonus: { min: number; mult: number }[];
   mutator: 'none' | 'double' | 'goldrain' | 'speed';
 }
@@ -50,6 +65,7 @@ export function defaultSimConfig(): SimConfig {
     fireInterval: 0.55, range: 190, bulletSpeed: 260,
     respawnSec: 3, respawnHpPct: 0.5, shieldSec: 2,
     damageCap: 3,
+    orbit: { count: 2, radius: 74, spin: 2.6, dmg: 6, cd: 0.75 },
     streakBonus: [
       { min: 50, mult: 1.6 }, { min: 30, mult: 1.5 },
       { min: 15, mult: 1.25 }, { min: 5, mult: 1.1 },

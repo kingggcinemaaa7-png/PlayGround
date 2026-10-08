@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeCommand } from '../src/commands.js';
+import { normalizeCommand, normalizeTeam } from '../src/commands.js';
 import { giftTier } from '../src/types.js';
-import { layoutViolations } from '../src/layout.js';
+import { Sim } from '../src/sim.js';
+import { defaultSimConfig } from '../src/types.js';
+import { layoutViolations, layoutZones, inTikTokDeadZone, deadZoneRatio, deadZoneViolations } from '../src/layout.js';
 import { fmtNum, upper, truncateNick } from '../src/locale.js';
 
 describe('commands', () => {
@@ -25,6 +27,30 @@ describe('commands', () => {
   it('rejects garbage', () => {
     expect(normalizeCommand('!hello')).toBeNull();
     expect(normalizeCommand('')).toBeNull();
+  });
+  it('takim komutu renkli ve renksiz', () => {
+    expect(normalizeCommand('!takim rojo')).toBe('team');
+    expect(normalizeCommand('!equipo azul')).toBe('team');
+    expect(normalizeCommand('!team red')).toBe('team');
+    expect(normalizeCommand('!takim kırmızı')).toBe('team');
+    expect(normalizeCommand('!takim')).toBe('team');
+    expect(normalizeCommand('!equipo')).toBe('team');
+  });
+  it('yardim komutu', () => {
+    expect(normalizeCommand('!ayuda')).toBe('help');
+    expect(normalizeCommand('!yardım')).toBe('help');
+    expect(normalizeCommand('!help')).toBe('help');
+  });
+});
+
+describe('takim rengi', () => {
+  it('renk ayrımı', () => {
+    expect(normalizeTeam('!takim rojo')).toBe('rojo');
+    expect(normalizeTeam('!takim azul')).toBe('azul');
+    expect(normalizeTeam('!team red')).toBe('rojo');
+    expect(normalizeTeam('!team blue')).toBe('azul');
+    expect(normalizeTeam('!takim')).toBeNull();
+    expect(normalizeTeam('!takim morado')).toBeNull();
   });
 });
 
@@ -57,5 +83,59 @@ describe('locale', () => {
   });
   it('truncate nicknames at 14 graphemes', () => {
     expect([...truncateNick('abcdefghijklmnop')].length).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('kenar guvenligi (Faz 4.1)', () => {
+  it('tum HUD bolgeleri TikTok olu bolgelerine girmemeli', () => {
+    for (const facecam of [false, true]) {
+      const bad = layoutZones(facecam).filter((r) => inTikTokDeadZone(r)).map((r) => r.name);
+      expect(bad).toEqual([]);
+    }
+  });
+  it('bolgeler birbirine girmemeli', () => {
+    expect(layoutViolations(false)).toEqual([]);
+    expect(layoutViolations(true)).toEqual([]);
+  });
+  it('kafa seridi aktifken de guvenli kalir', () => {
+    const zs = layoutZones(true);
+    const top = zs.find((z) => z.name === 'topbar')!;
+    expect(top.y).toBeGreaterThan(0);
+    expect(top.h).toBeLessThanOrEqual(220);
+  });
+});
+describe('dead zone orani', () => {
+  it('tam genislik bant riskli sayilmaz', () => {
+    expect(deadZoneRatio({ x: 0, y: 0, w: 1080, h: 200, name: 'x' })).toBeLessThan(0.4);
+  });
+  it('sag kenarda kucuk kutu riskli', () => {
+    expect(deadZoneRatio({ x: 1000, y: 800, w: 80, h: 80, name: 'x' })).toBeGreaterThan(0.4);
+  });
+  it('alt kenar seridi riskli', () => {
+    expect(deadZoneRatio({ x: 400, y: 1840, w: 280, h: 80, name: 'x' })).toBeGreaterThan(0.4);
+  });
+  it('merkez guvenli', () => {
+    expect(inTikTokDeadZone({ x: 300, y: 900, w: 400, h: 300, name: 'x' })).toBe(false);
+  });
+});
+
+describe('ayrisma (Faz 2.6)', () => {
+  it('yaklasan oyuncular ust uste binmez', () => {
+    const sim = new Sim(defaultSimConfig(), 7);
+    // ayni noktaya 4 oyuncu koy -> birbirlerini itmeleri gerek
+    for (let i = 0; i < 4; i++) {
+      const a = sim.makeAvatar(`u${i}`, `P${i}`, null);
+      a.x = 540; a.y = 960; a.alive = true;
+      sim.addAvatar(a);
+    }
+    for (let i = 0; i < 40; i++) sim.update(1 / 60);
+    let tooClose = 0;
+    const list = [...sim.avatars.values()];
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (Math.hypot(list[i].x - list[j].x, list[i].y - list[j].y) < 12) tooClose++;
+      }
+    }
+    expect(tooClose).toBe(0);
   });
 });

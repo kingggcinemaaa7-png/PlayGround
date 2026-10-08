@@ -3,11 +3,12 @@ import { Net } from './net.js';
 import { AdminConsole } from './admin/console.js';
 import { assets } from './assets.js';
 import { audio } from './audio.js';
+import { showSplash, splashError, collectDiag, fetchWithTimeout } from './boot.js';
 import type { LiveEvent } from '@tac/shared';
 
 async function loadConfig() {
   try {
-    const r = await fetch('/config.json');
+    const r = await fetchWithTimeout('/config.json', 4000);
     if (r.ok) return await r.json();
   } catch { /* fallback */ }
   return {
@@ -24,26 +25,46 @@ async function loadConfig() {
 
 // NOTE: no top-level await in this module — Rollup code-splits Pixi into
 // chunks with cyclic imports back to the entry, and TLA would deadlock them.
+function setStage(s: string) {
+  (window as unknown as { __tacBootStage?: string }).__tacBootStage = s;
+}
+
 function main(): Promise<void> {
   return (async () => {
     const q = new URLSearchParams(location.search);
+    const safemode = q.get('safemode') === '1';
+    setStage('modul basladi');
+    showSplash(safemode);
     if (q.get('duration')) localStorage.setItem('tac-duration', q.get('duration')!);
 
+    setStage('ayar okunuyor');
     const cfg = await loadConfig();
     const durOverride = Number(localStorage.getItem('tac-duration') ?? q.get('duration') ?? 0);
     if (durOverride > 0) cfg.match.durationSec = durOverride;
     if (q.get('locale')) cfg.locale.default = q.get('locale')!;
 
     const game = new Game(cfg);
+    game.loadGifts();
     (window as unknown as { __game?: Game; __assets?: unknown }).__game = game;
     (window as unknown as { __assets?: unknown; __audio?: unknown }).__assets = assets;
     (window as unknown as { __audio?: unknown }).__audio = audio;
     try {
-      await game.boot(document.getElementById('wrap')!);
+      setStage('oyun aciliyor');
+      await game.boot(document.getElementById('wrap')!, safemode, setStage);
     } catch (err) {
       console.error('[tac] boot failed', err);
       (window as unknown as { __tacError?: unknown }).__tacError = String(err);
-      document.getElementById('wrap')!.innerHTML = `<pre style="color:#fff;font:16px monospace;padding:20px">Boot failed: ${String(err)}</pre>`;
+      let configState = '?';
+      try {
+        const r = await fetchWithTimeout('/config.json', 3000, { method: 'HEAD' });
+        configState = r.ok ? 'ok' : `HTTP ${r.status}`;
+      } catch (e) { configState = `erisim yok (${String(e).slice(0, 60)})`; }
+      let manifestState = '?';
+      try {
+        const r = await fetchWithTimeout('assets/assets.manifest.json', 3000, { method: 'HEAD' });
+        manifestState = r.ok ? 'ok' : `HTTP ${r.status}`;
+      } catch (e) { manifestState = `erisim yok (${String(e).slice(0, 60)})`; }
+      splashError('Açılış hatası', err, collectDiag({ config: configState, manifest: manifestState }));
       throw err;
     }
 
@@ -54,6 +75,8 @@ function main(): Promise<void> {
     const bridge = new URLSearchParams(location.search).get('bridge')
       ?? (cfg.admin?.defaultBridge ?? `ws://${location.hostname}:8081`);
     const net = new Net(bridge, (e: LiveEvent) => game.ingest(e));
+    // Faz 3.3: kopma/bağlanma duyurusu — oyun ASLA durmaz, sadece haber verir
+    net.onStatus = (ok) => game.bridgeStatus(ok);
     net.connect();
 
     // streamer control console (never captured: lives outside the canvas)
@@ -101,4 +124,4 @@ function main(): Promise<void> {
   })();
 }
 
-main().catch(() => undefined);
+main().catch((e) => console.error('[tac] main', e));

@@ -1,30 +1,54 @@
 // Tiny WebAudio synth: no external files, original sounds only.
 // Master/music/sfx gains, ducking under announcer, mute toggle, -16 LUFS-ish (conservative gains).
+import { fetchWithTimeout } from './boot.js';
+
 export class AudioBus {
   ctx: AudioContext | null = null;
+  /** safemode disables the whole audio graph (no AudioContext at all). */
+  enabled = true;
+  setEnabled(on: boolean) { this.enabled = on; }
   master!: GainNode; music!: GainNode; sfx!: GainNode; duckGain!: GainNode;
+  /** konsoldan seçilen müziklerin görünen adı (kalıcı) */
+  savedNames = new Map<string, string>();
   muted = false;
+  /** Independent music switch (console "Müzik" button). SFX keep playing. */
+  musicEnabled = true;
+  setMusicEnabled(on: boolean) {
+    this.musicEnabled = on;
+    if (!on) this.stopAllMusic();
+    else { this.ensure(); this.loop(); this.syncMusicLayers(); }
+  }
   /** decoded sample files by logical name (music-calm, music-intense, sfx-meteor...) */
   files = new Map<string, AudioBuffer>();
   private playing = new Map<string, AudioBufferSourceNode>();
   private musicNodes: AudioBufferSourceNode[] = [];
   ensure() {
+    if (!this.enabled) return;
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new AC();
     this.master = this.ctx.createGain(); this.master.gain.value = 0.6;
+    // Faz 4.2: master -> yumuşak sınırlayıcı -> çıkış (kırpma olmaz)
+    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = this.ceilingDb;
+    this.limiter.knee.value = 6;
+    this.limiter.ratio.value = 12;
+    this.limiter.attack.value = 0.003;
+    this.limiter.release.value = 0.25;
     this.analyser = this.ctx.createAnalyser();
-    this.master.connect(this.analyser); this.analyser.connect(this.ctx.destination);
+    this.master.connect(this.limiter);
+    this.limiter.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
     this.music = this.ctx.createGain(); this.music.gain.value = 0.5; this.music.connect(this.master);
     this.sfx = this.ctx.createGain(); this.sfx.gain.value = 0.7; this.sfx.connect(this.master);
-    this.loop();
+    if (!this.synthRunning) this.loop();
   }
   /** Load a real audio file; returns false so callers keep the synth fallback. */
   async load(name: string, url: string): Promise<boolean> {
     this.ensure();
     if (!this.ctx) return false;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, 4000);
       if (!res.ok) return false;
       const buf = await res.arrayBuffer();
       this.files.set(name, await this.ctx.decodeAudioData(buf));
@@ -32,6 +56,37 @@ export class AudioBus {
     } catch { return false; }
   }
   has(name: string) { return this.files.has(name); }
+  /** File/Blob kaynağı (konsol dosya seçici + IndexedDB). */
+  async loadBlob(name: string, blob: Blob): Promise<boolean> {
+    this.ensure();
+    if (!this.ctx) return false;
+    try {
+      const buf = await blob.arrayBuffer();
+      this.files.set(name, await this.ctx.decodeAudioData(buf));
+      // synth pad çalışıyorsa sustur, gerçek parça devralsın
+      this.syncMusicLayers();
+      return true;
+    } catch { return false; }
+  }
+  /** Konsolun kaydettiği müzikleri geri yükle (IDB -> decode). Yüklenen adedi döner. */
+  async restoreSaved(): Promise<number> {
+    this.ensure();
+    if (!this.ctx) return 0;
+    let n = 0;
+    try {
+      const { idbLoadAll } = await import('./audioIdb.js');
+      for (const { name, blob, filename } of await idbLoadAll()) {
+        try {
+          const buf = await blob.arrayBuffer();
+          this.files.set(name, await this.ctx.decodeAudioData(buf));
+          if (filename) this.savedNames.set(name, filename);
+          n++;
+        } catch { /* bozuk kayıt atlanır */ }
+      }
+    } catch { /* IDB yok */ }
+    if (n) this.syncMusicLayers();
+    return n;
+  }
 
   /** Loop a real music track; `layer` lets calm+intense stack. */
   playMusic(name: string, layer = 1): boolean {
@@ -73,22 +128,31 @@ export class AudioBus {
   }
 
   setVolumes(master: number, music: number, sfx: number) {
+    this.masterTarget = master; this.musicTarget = music; this.sfxTarget = sfx;
     if (!this.ctx) return;
     this.master.gain.value = master; this.music.gain.value = music; this.sfx.gain.value = sfx;
   }
+  private masterTarget = 0.6;
+  private sfxTarget = 0.7;
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.ctx) this.master.gain.value = this.muted ? 0 : 0.6;
+    if (this.ctx) this.master.gain.value = this.muted ? 0 : this.masterTarget;
     return this.muted;
   }
+  /** Spiker altında müziği kısar. Kısa süre sonra KAYDEDİLEN seviyeye döner. */
   duck(sec = 0.8) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    // M11: hedef mutlak 0.35 idi; konsoldaki müzik kaydırıcısının ayarını
+    // kalıcı olarak eziyordu. Artık mevcut seviyeye geri dönüyoruz.
+    const target = this.musicTarget;
     this.music.gain.cancelScheduledValues(t);
     this.music.gain.setValueAtTime(this.music.gain.value, t);
-    this.music.gain.linearRampToValueAtTime(0.12, t + 0.1);
-    this.music.gain.linearRampToValueAtTime(0.35, t + sec);
+    this.music.gain.linearRampToValueAtTime(target * 0.3, t + 0.1);
+    this.music.gain.linearRampToValueAtTime(target, t + sec);
   }
+  /** Konsolun müzik kaydırıcısı ayarladığı hedef seviye (0..1). */
+  private musicTarget = 0.5;
   private tone(freq: number, dur: number, type: OscillatorType, vol: number, slide = 0, delay = 0, bus?: GainNode) {
     if (!this.ctx) return;
     const t0 = this.ctx.currentTime + delay;
@@ -127,21 +191,43 @@ export class AudioBus {
   ui() { this.tone(600, 0.06, 'sine', 0.1); }
   private loop() {
     if (this.files.size) { this.syncMusicLayers(); return; }
-    // adaptive calm->intense pad: schedule soft arpeggio; intensity set via setIntense()
+    // Gentle kalimba-like plucks (A-major pentatonic). Each note decays fully
+    // before the next starts, so nothing ever stacks into a drone.
+    // The chain exits by itself the moment a real music file is registered.
+    const calmSeq = [440, 550, 660, 550, 740, 660, 550, 440];
+    const hotSeq = [220, 264, 330, 264, 220, 330, 264, 220];
+    let i = 0;
     const step = () => {
-      if (!this.ctx) return;
-      const notes = this.intense ? [110, 130, 98, 146] : [220, 277, 330, 277];
-      const n = notes[Math.floor(Math.random() * notes.length)];
-      this.tone(n, 1.2, 'sine', this.intense ? 0.05 : 0.03, 0, 0, this.music);
-      setTimeout(step, this.intense ? 420 : 900);
+      if (!this.ctx || !this.musicEnabled) return;
+      if (this.files.size) { this.syncMusicLayers(); return; } // real track took over
+      const seq = this.intense ? hotSeq : calmSeq;
+      const n = seq[i % seq.length]; i++;
+      // triangle pluck, 0.55s decay, 0.72s grid -> no overlap, no hum
+      this.tone(n, 0.55, 'triangle', 0.028, 0, 0, this.music);
+      // soft octave shimmer an octave up, half as loud
+      this.tone(n * 2, 0.4, 'sine', 0.012, 0, 0.02, this.music);
+      // M10: eski hali `if (!this.ctx || !this.musicEnabled) return;` idi ve
+      // setTimeout YENIDEN PLANLANMIYORDU. Bir kez müziği kapatmak yayını
+      // kalıcı olarak susturuyordu (dosya yoksa bir daha açılmıyordu).
+      if (!this.ctx || !this.musicEnabled) { this.synthRunning = false; return; }
+      setTimeout(step, this.intense ? 430 : 720);
     };
-    step();
+    if (!this.synthRunning) { this.synthRunning = true; step(); }
   }
+  private synthRunning = false;
 
-  /** Real tracks: calm always, intense only when the arena heats up. */
+  /** Real tracks: calm always, intense only when the arena heats up.
+   * If a layer file is missing we never touch the other layer — a boss fight
+   * must never silence the stream just because music-intense is not supplied. */
   syncMusicLayers() {
-    if (this.intense) { this.playMusic('music-intense', 0.7); this.stopMusic('music-calm'); }
-    else { this.playMusic('music-calm', 0.7); this.stopMusic('music-intense'); }
+    if (!this.musicEnabled) { this.stopAllMusic(); return; }
+    if (this.intense && this.has('music-intense')) {
+      this.playMusic('music-intense', 0.7);
+      this.stopMusic('music-calm');
+    } else if (this.has('music-calm')) {
+      this.playMusic('music-calm', 0.7);
+      this.stopMusic('music-intense');
+    }
   }
 
   /**
@@ -160,7 +246,16 @@ export class AudioBus {
     this.tone(1180, 0.08 + words * 0.02, 'triangle', 0.03, -260, 0.22);
   }
 
-  /** Rough integrated-loudness meter (dBFS proxy) for the -16 LUFS target. */
+  /**
+   * Faz 4.2 — ses standardizasyonu.
+   * Hedef: kalıcı ses (müzik) ≈ −20 dBFS RMS, tepe ≈ −3 dBFS.
+   * Yayınlarda kırpma (clipping) en kötü hatadır: müzik/efekt kazançları
+   * yumuşak sınırlayıcıdan geçer. `ceilingDb` master'da uygulanır.
+   */
+  /** Yumuşak sınırlayıcı: tepe seviyeyi verilen değere indirir, kırpma yapmaz. */
+  private limiter!: DynamicsCompressorNode;
+  ceilingDb = -3;
+  /** Konsola gösterilecek kalıcı seviye (dBFS RMS). */
   measureLevel(): number {
     if (!this.analyser) this.analyser = this.ctx ? this.ctx.createAnalyser() : null;
     if (!this.analyser) return -100;
@@ -170,6 +265,22 @@ export class AudioBus {
     for (const v of buf) sum += v * v;
     const rms = Math.sqrt(sum / buf.length) || 1e-9;
     return 20 * Math.log10(rms);
+  }
+  /** Tepe seviye (dBFS) — kırpma kontrolü için. */
+  measurePeak(): number {
+    if (!this.analyser) this.analyser = this.ctx ? this.ctx.createAnalyser() : null;
+    if (!this.analyser) return -100;
+    const buf = new Float32Array(this.analyser.fftSize);
+    this.analyser.getFloatTimeDomainData(buf);
+    let peak = 1e-9;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v));
+    return 20 * Math.log10(peak);
+  }
+  /** Konsol için tek satırlık durum: seviye, tepe, kırpma uyarısı. */
+  audioStatus(): { rms: number; peak: number; clipping: boolean; music: boolean } {
+    const rms = this.measureLevel();
+    const peak = this.measurePeak();
+    return { rms, peak, clipping: peak > -0.5, music: this.musicEnabled && !this.muted };
   }
   private analyser: AnalyserNode | null = null;
 

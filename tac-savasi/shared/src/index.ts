@@ -5,3 +5,4 @@ export * from './commands.js';
 export * from './locale.js';
 export * from './layout.js';
 export * from './sim.js';
+export * from './gifts.js';

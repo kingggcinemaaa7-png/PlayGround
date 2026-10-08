@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { panelTex, crownTex, shineTex, ringFrameTex, spikesTex, glowTex } from './textures.js';
 import { tweener, Ease } from './tween.js';
 import { t, fmtNum, upper, truncateNick, layoutZones } from '@tac/shared';
+import { assets } from '../assets.js';
 import { H as SCREEN_H, W as SCREEN_W } from '@tac/shared';
 
 export const Z = {
@@ -258,7 +259,10 @@ export class Hud {
   }
 
   setTicker(text: string, userId?: string, name?: string) {
-    this.tickerBox.visible = !!text;
+    // M7: setArenaHudVisible(false) çağrılsa bile şerid her karede geri
+    // geliyordu; sonuç ekranlarının üstüne biniyordu.
+    this.tickerBox.visible = this.arenaHudOn && !!text;
+    if (!this.arenaHudOn) return;
     if (!text) return;
     this.tickerT.text = text;
     if (userId && this.pic) {
@@ -285,18 +289,24 @@ export class Hud {
       const tex = this.pic(r.userId, r.name);
       if (v.pic.texture !== tex) v.pic.texture = tex;
       v.name.text = truncateNick(r.name, 10);
-      v.stats.text = `${fmtNum(this.locale, r.score)} ${t(this.locale, 'points')} · ${r.kills} ${this.shortKills()}`;
-      if (v.stats.width > 220)
-      if (v.stats.width > 220) v.stats.style.fontSize = 14; else v.stats.style.fontSize = 16;
-      v.stats.text = `${fmtNum(this.locale, r.score)} ${t(this.locale, 'points')} · ${r.kills} ${this.shortKills()}`;
+      // M24: satır iki kez yazılıyordu ve ölü bir `if` vardı; ikinci atama
+      // her karede metni yeniden ölçüp texture yüklüyordu.
+      const line = `${fmtNum(this.locale, r.score)} ${t(this.locale, 'points')} · ${r.kills} ${this.shortKills()}`;
+      if (v.stats.text !== line) v.stats.text = line;
+      v.stats.style.fontSize = v.stats.width > 220 ? 14 : 16;
       v.ring.clear();
       const col = idx === 0 ? 0xffd23f : idx === 1 ? 0xcfd6e0 : 0xd98a4a;
       const rr = idx === 0 ? 46 : 36;
       v.ring.circle(0, idx === 0 ? -6 : 0, rr).stroke({ color: col, width: idx === 0 ? 8 : 6 });
       v.ring.circle(0, idx === 0 ? -6 : 0, rr - 9).stroke({ color: 0xffffff, width: 2, alpha: 0.35 });
+      if (this.crownV !== assets.version) {
+        this.crownV = assets.version;
+        const old = v.box.children.find((c) => c.label === 'crown') as PIXI.Sprite | undefined;
+        if (old) old.texture = assets.texOr('avatars.crown', crownTex);
+      }
       if (idx === 0) {
         if (!v.box.children.find((c) => c.label === 'crown')) {
-          const cr = new PIXI.Sprite(crownTex());
+          const cr = new PIXI.Sprite(assets.texOr('avatars.crown', crownTex));
           cr.anchor.set(0.5); cr.width = 54; cr.height = 40;
           cr.position.set(0, -62); cr.label = 'crown';
           v.box.addChild(cr);
@@ -329,7 +339,7 @@ export class Hud {
       });
       this.gifterViews.forEach((v, i) => {
         if (i === 0) {
-          const cr = new PIXI.Sprite(crownTex());
+          const cr = new PIXI.Sprite(assets.texOr('avatars.crown', crownTex));
           cr.anchor.set(0.5); cr.width = 30; cr.height = 22;
           cr.position.set(4, 6);
           v.box.addChild(cr);
@@ -467,8 +477,8 @@ export class Hud {
     box.alpha = 0;
     box.scale.set(0.4);
     this.announceBox.addChild(box);
-    tweener.to(box, 'alpha', 1, 0.18);
-    tweener.to(box, 'scale', 1, 0.34, { ease: Ease.outBack });
+    tweener.to(box, 'alpha', 1, 0.18, { id: 'ann-a' });
+    tweener.to(box, 'scale', 1, 0.34, { ease: Ease.outBack, id: 'ann-s' });
     tweener.to(shine, 'x', 620, 0.9, { delay: 0.12, ease: Ease.inCubic });
     // NB: `children` is Pixi's live array — never mutate it, or the render
     // group cache desyncs and updateLocalTransform() crashes on a null parent.
@@ -484,7 +494,7 @@ export class Hud {
     const targetY = 72 + (this.announceBox.children.length - 1) * LANE;
     tweener.to(box, 'y', targetY, 0.3, { ease: Ease.outCubic });
     tweener.to(box, 'alpha', 0, 0.45, {
-      delay: 2.6, onDone: () => { box.destroy({ children: true }); },
+      delay: 2.6, id: 'ann-out-a', onDone: () => { box.destroy({ children: true }); },
     });
     // gentle float
     const y0 = targetY;
@@ -549,7 +559,12 @@ export class Hud {
     }
   }
 
-  heroCard(name: string, userId: string, desc: string, color: number) {
+  /**
+   * Kahraman kartı (Faz 1.4): HER hediye için büyük, animasyonlu kart.
+   * `icon` hediye simgesi, `effect` ne yaptığını söyler. Kart üstten kayar,
+   * parlar ve kaybolur; ardından isim ekranın üstünden yükselip uçar.
+   */
+  heroCard(name: string, userId: string, desc: string, color: number, icon?: string, effect?: string) {
     const box = new PIXI.Container();
     const bg = panel(Z.hero.w, Z.hero.h, 0.95, 26);
     bg.tint = color;
@@ -559,18 +574,64 @@ export class Hud {
     const glow = new PIXI.Sprite(glowTex());
     glow.anchor.set(0.5); glow.tint = color; glow.alpha = 0.5; glow.blendMode = 'add';
     glow.width = 320; glow.height = 320; glow.position.set(110, 110);
+    // hediye rozeti: kartın sol üstünde büyük ikon
+    let badge: PIXI.Container | null = null;
+    if (icon) {
+      badge = new PIXI.Container();
+      const halo = new PIXI.Sprite(glowTex());
+      halo.anchor.set(0.5); halo.tint = color; halo.alpha = 0.75; halo.blendMode = 'add';
+      halo.width = halo.height = 190; halo.position.set(60, 52);
+      const ico = new PIXI.Text({
+        text: icon,
+        style: { fontFamily: 'system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif', fontSize: 84 },
+      });
+      ico.anchor.set(0.5); ico.resolution = 2; ico.position.set(60, 52);
+      badge.addChild(halo, ico);
+    }
     const title = txt(`★ ${truncateNick(name, 14)}`, 44, 0xffffff);
     title.anchor.set(0, 0.5); title.position.set(190, 78);
     const sub = soft(desc, 28, 0xfff3c4);
     sub.anchor.set(0, 0.5); sub.position.set(192, 132);
-    box.addChild(bg, glow, pic, title, sub);
-    box.position.set(Z.hero.x, Z.hero.y);
-    box.alpha = 0; box.scale.set(0.85);
+    const eff = effect ? soft(effect, 24, 0xffffff) : null;
+    if (eff) { eff.anchor.set(0, 0.5); eff.position.set(192, 176); eff.alpha = 0.9; }
+    box.addChild(bg, glow, pic, ...(badge ? [badge] : []), title, sub, ...(eff ? [eff] : []));
+    // giriş: yukarıdan düş + geri sekmeli büyüme + parlak şimşek
+    box.position.set(Z.hero.x, Z.hero.y - 90);
+    box.alpha = 0; box.scale.set(0.7);
     this.centerLayer.addChild(box);
-    tweener.to(box, 'alpha', 1, 0.22);
-    tweener.to(box, 'scale', 1, 0.45, { ease: Ease.outBack });
-    tweener.to(box, 'y', Z.hero.y - 20, 0.5, { ease: Ease.outCubic });
-    tweener.to(box, 'alpha', 0, 0.4, { delay: 3.4, onDone: () => box.destroy({ children: true }) });
+    tweener.to(box, 'y', Z.hero.y, 0.4, { ease: Ease.outBack, id: 'hero-y' });
+    tweener.to(box, 'alpha', 1, 0.16, { id: 'hero-a' });
+    tweener.to(box, 'scale', 1, 0.42, { ease: Ease.outBack, id: 'hero-s' });
+    if (badge) tweener.to(badge, 'scale', 1, 0.5, { ease: Ease.outElastic, id: 'hero-b' });
+    tweener.to(glow, 'alpha', 0.95, 0.3, { delay: 0.2, id: 'hero-g1' });
+    tweener.to(glow, 'alpha', 0.4, 0.5, { delay: 0.8, id: 'hero-g2' });
+    // çıkış: küçülüp kaybol (id'li -> girişi silmez)
+    tweener.to(box, 'scale', 0.86, 0.35, { delay: 3.2, ease: Ease.inCubic, id: 'hero-out-s' });
+    tweener.to(box, 'alpha', 0, 0.35, { delay: 3.2, id: 'hero-out-a', onDone: () => box.destroy({ children: true }) });
+    // isim kartı yukarıdan kayarak geçer (her hediyede tekrar eden görsel ritim)
+    this.nameFly(name, color, 0.12);
+  }
+
+  /** Kahraman kartından sonra ekranın üstünden yükselip uçan isim şeridi. */
+  private nameFly(name: string, color: number, delay = 0) {
+    const c = new PIXI.Container();
+    const glow = new PIXI.Sprite(glowTex());
+    glow.anchor.set(0.5); glow.tint = color; glow.alpha = 0.7; glow.blendMode = 'add';
+    glow.width = glow.height = 520; glow.position.set(0, -14);
+    const bar = panel(700, 104, 0.92, 20);
+    bar.tint = color;
+    const label = txt(`★ ${truncateNick(name, 14)}`, 54, 0xffffff);
+    label.anchor.set(0.5); label.position.set(0, -18);
+    const sub = soft(upper(this.locale, t(this.locale, 'gifted')), 26, 0xfff3c4);
+    sub.anchor.set(0.5); sub.position.set(0, 30);
+    c.addChild(glow, bar, label, sub);
+    c.position.set(540, 1700);
+    this.centerLayer.addChild(c);
+    tweener.to(c, 'y', 1560, 1.5, { delay, ease: Ease.outCubic, id: 'fly-y' });
+    tweener.to(c, 'alpha', 0, 0.5, { delay: delay + 1.0, id: 'fly-a' });
+    tweener.to(c, 'scale', 1.08, 1.5, { delay, ease: Ease.outCubic, id: 'fly-s' });
+    tweener.to(glow, 'alpha', 0, 1.2, { delay: delay + 0.3, id: 'fly-g' });
+    setTimeout(() => c.destroy({ children: true }), (delay + 2.2) * 1000);
   }
 
   update(dt: number) {
@@ -660,6 +721,7 @@ export class Hud {
   }
   private arenaHudOn = true;
   private maxGifters = 5;
+  private crownV = -1;
 
   /* ---------- scenes ---------- */
   sceneDim(alpha = 0.82) {
@@ -733,13 +795,25 @@ export class Hud {
 
   sceneAwards(locale: string, awards: { title: string; name: string; detail: string; userId?: string; color: number }[], secondsLeft: number) {
     this.sceneDim(0.86);
+    // Faz 1.5: sahne girişi — başlık düşer, kartlar sırayla parlar
     const title = txt(upper(locale, t(locale, 'awards')), 46, 0xffd23f);
-    title.anchor.set(0.5); title.position.set(540, 290);
+    title.anchor.set(0.5); title.position.set(540, 230);
     this.sceneLayer.addChild(title);
+    tweener.to(title, 'y', 290, 0.55, { from: 130, ease: Ease.outBack });
+    tweener.to(title, 'alpha', 1, 0.25, { from: 0 });
+    const shine = new PIXI.Sprite(shineTex());
+    shine.anchor.set(0.5); shine.blendMode = 'add'; shine.alpha = 0.9;
+    shine.width = 520; shine.height = 130; shine.position.set(540, 290);
+    this.sceneLayer.addChild(shine);
+    tweener.to(shine, 'alpha', 0, 0.6, { delay: 0.5 });
     awards.forEach((a, i) => {
       const box = new PIXI.Container();
       const bg = panel(880, 150, 0.95, 22);
       bg.tint = a.color;
+      // kart ışıması: her kart geldiğinde bir parlama
+      const flash = new PIXI.Sprite(glowTex());
+      flash.anchor.set(0.5); flash.tint = 0xffffff; flash.blendMode = 'add'; flash.alpha = 0;
+      flash.width = flash.height = 900; flash.position.set(440, 75);
       const pic = new PIXI.Sprite(a.userId ? this.pic(a.userId, a.name) : PIXI.Texture.WHITE);
       pic.anchor.set(0.5); pic.width = pic.height = 104; pic.position.set(96, 75);
       if (!a.userId) pic.alpha = 0;
@@ -749,17 +823,24 @@ export class Hud {
       nm.anchor.set(0, 0.5); nm.position.set(180, 88);
       const dt2 = soft(a.detail, 22, 0xffffff);
       dt2.anchor.set(0, 0.5); dt2.position.set(182, 124);
-      box.addChild(bg, pic, at, nm, dt2);
+      box.addChild(bg, flash, pic, at, nm, dt2);
       box.position.set(100, 430 + i * 172);
       box.alpha = 0; box.x = 40;
       this.sceneLayer.addChild(box);
-      tweener.to(box, 'alpha', 1, 0.25, { delay: 0.15 * i });
-      tweener.to(box, 'x', 100, 0.4, { delay: 0.15 * i, from: 40, ease: Ease.outCubic });
-      tweener.to(box, 'scale', 1, 0.5, { delay: 0.15 * i, from: 0.9, ease: Ease.outBack });
+      const d = 0.15 * i + 0.2;
+      tweener.to(box, 'alpha', 1, 0.25, { delay: d });
+      tweener.to(box, 'x', 100, 0.4, { delay: d, from: 40, ease: Ease.outCubic });
+      tweener.to(box, 'scale', 1, 0.5, { delay: d, from: 0.9, ease: Ease.outBack });
+      tweener.to(flash, 'alpha', 0.75, 0.18, { delay: d });
+      tweener.to(flash, 'alpha', 0, 0.5, { delay: d + 0.2 });
+      // kart içeri sonra hafifçe geri otursun (canlı duruş)
+      tweener.to(box, 'y', 430 + i * 172 - 6, 0.8, { delay: d + 0.7, ease: Ease.outCubic });
+      tweener.to(box, 'y', 430 + i * 172, 0.6, { delay: d + 1.5, ease: Ease.outCubic });
     });
     const hint = soft(upper(locale, `${t(locale, 'nextIn')}  ${Math.ceil(secondsLeft)}`), 30, 0xffffff);
     hint.anchor.set(0.5); hint.position.set(540, 1400);
     this.sceneLayer.addChild(hint);
+    tweener.to(hint, 'alpha', 1, 0.4, { from: 0 });
   }
 
   scenePodium(locale: string, top: RankRow[], gifters: GifterRow[], viewerId: string | null) {
@@ -794,7 +875,7 @@ export class Hud {
       stats.anchor.set(0.5); stats.position.set(0, -s.h - 150);
       box.addChild(block, rank, pic, name, stats);
       if (idx === 0) {
-        const cr = new PIXI.Sprite(crownTex());
+        const cr = new PIXI.Sprite(assets.texOr('avatars.crown', crownTex));
         cr.anchor.set(0.5); cr.width = 110; cr.height = 80;
         cr.position.set(0, -s.h - 226);
         box.addChild(cr);
@@ -854,7 +935,7 @@ export class Hud {
   }
 
   bossCrown() {
-    const cr = new PIXI.Sprite(crownTex());
+    const cr = new PIXI.Sprite(assets.texOr('avatars.crown', crownTex));
     cr.anchor.set(0.5);
     this.topLayer.addChild(cr);
     return cr;

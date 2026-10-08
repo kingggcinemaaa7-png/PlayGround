@@ -2,6 +2,7 @@
 // files when the streamer drops them in. Missing files silently keep the
 // procedural fallback, so the game always renders.
 import * as PIXI from 'pixi.js';
+import { fetchWithTimeout } from './boot.js';
 
 export interface AssetManifest {
   version: number;
@@ -39,6 +40,8 @@ export interface LoadedAudio {
 
 export class AssetLoader {
   manifest: AssetManifest | null = null;
+  /** bumped every time a real file lands, so views can swap it in live */
+  version = 0;
   textures = new Map<Slot, PIXI.Texture>();
   audio = new Map<string, LoadedAudio>();
   missing: string[] = [];
@@ -48,38 +51,42 @@ export class AssetLoader {
 
   async load(base = 'assets'): Promise<void> {
     try {
-      const r = await fetch(`${base}/assets.manifest.json`, { cache: 'no-cache' });
+      const r = await fetchWithTimeout(`${base}/assets.manifest.json`, 4000, { cache: 'no-cache' });
       if (r.ok) this.manifest = await r.json() as AssetManifest;
     } catch { /* manifest optional */ }
 
     // --- sprites ---
-    for (const [slot, candidates] of Object.entries(SLOT_FILES) as [Slot, string[]][]) {
-      for (const p of candidates) {
-        const tex = await this.tryTexture(`${base}/${p.replace(/^assets\//, '')}`);
-        if (tex) {
-          this.textures.set(slot, tex);
-          this.loaded.push(p);
-          break;
-        } else if (tex === null) {
+    {
+      // all sprites probed in parallel: a slow tunnel must not serialize boot
+      const jobs = (Object.entries(SLOT_FILES) as [Slot, string[]][]).map(async ([slot2, candidates]) => {
+        for (const p of candidates) {
+          const tex = await this.tryTexture(`${base}/${p.replace(/^assets\//, '')}`);
+          if (tex) {
+            this.textures.set(slot2, tex);
+            this.loaded.push(p);
+            this.version++;
+            break;
+          }
           this.missing.push(p);
         }
-      }
+      });
+      await Promise.all(jobs);
     }
 
     // --- audio (decoded lazily; missing = procedural synth) ---
     if (this.manifest?.audio?.length) {
-      for (const a of this.manifest.audio) {
-        if (a.includes('*')) continue;         // announcer glob slots stay empty
+      await Promise.all(this.manifest.audio.map(async (a) => {
+        if (a.includes('*')) return;              // announcer glob slots stay empty
         const url = `${base}/${a}`;
         try {
-          const head = await fetch(url, { method: 'HEAD' });
+          const head = await fetchWithTimeout(url, 3000, { method: 'HEAD' });
           // dev/preview servers may answer unknown paths with index.html (200),
           // so the content type has to agree before we call a slot "present"
           const ct = head.headers.get('content-type') ?? '';
-          if (!head.ok || ct.includes('text/html')) { this.missing.push(a); continue; }
+          if (!head.ok || ct.includes('text/html')) { this.missing.push(a); return; }
           this.loaded.push(a);
         } catch { this.missing.push(a); }
-      }
+      }));
     }
 
     // --- fonts: injected as CSS so Pixi Text picks them up ---
@@ -96,11 +103,15 @@ export class AssetLoader {
 
   private async tryTexture(url: string): Promise<PIXI.Texture | null> {
     // Plain <img> decode keeps this independent of Pixi asset extensions
-    // (works for png/webp/jpg/svg) and never throws on a missing file.
+    // (works for png/webp/jpg/svg). A watchdog resolves null so a stalled
+    // image can never wedge boot.
     return new Promise((resolve) => {
+      let done = false;
+      const finish = (t: PIXI.Texture | null) => { if (!done) { done = true; resolve(t); } };
+      const timer = setTimeout(() => finish(null), 5000);
       const img = new Image();
-      img.onload = () => resolve(PIXI.Texture.from(img));
-      img.onerror = () => resolve(null);
+      img.onload = () => { clearTimeout(timer); finish(PIXI.Texture.from(img)); };
+      img.onerror = () => { clearTimeout(timer); finish(null); };
       img.src = url;
     });
   }
@@ -111,6 +122,12 @@ export class AssetLoader {
     this.audio.set(name, { url, buffer });
   }
   audioFor(name: string): LoadedAudio | undefined { return this.audioByName.get(name); }
+
+  /** Current best texture for a slot: your file if it arrived, else procedural. */
+  texOr(slot: Slot, fallback: () => import('pixi.js').Texture): import('pixi.js').Texture {
+    return this.textures.get(slot) ?? fallback();
+  }
+  has(slot: Slot): boolean { return this.textures.has(slot); }
 
   /** Sprites present / missing, for the admin console. */
   report() {

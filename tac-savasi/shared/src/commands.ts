@@ -1,8 +1,11 @@
 // Command normalization: case/accents/tr-TR aware + 1-typo tolerance.
-const ALIASES: Record<string, 'shield' | 'fire' | 'respond'> = {
+const ALIASES: Record<string, 'shield' | 'fire' | 'respond' | 'power' | 'team' | 'help'> = {
   escudo: 'shield', kalkan: 'shield', shield: 'shield',
-  fuego: 'fire', 'ateş': 'fire', ates: 'fire', fire: 'fire',
+  fuego: 'fire', ateş: 'fire', ates: 'fire', fire: 'fire',
   responde: 'respond', cevap: 'respond', respond: 'respond',
+  poder: 'power', güç: 'power', guc: 'power', power: 'power',
+  equipo: 'team', takım: 'team', takim: 'team', team: 'team',
+  ayuda: 'help', yardım: 'help', yardim: 'help', help: 'help',
 };
 
 function trLower(s: string): string {
@@ -34,10 +37,35 @@ function levenshtein1(a: string, b: string): boolean {
   return edits <= 1;
 }
 
-export type Cmd = 'shield' | 'fire' | 'respond' | null;
+export type Cmd = 'shield' | 'fire' | 'respond' | 'power' | 'team' | 'help' | null;
+export type Team = 'rojo' | 'azul' | null;
+
+/** Faz 3.5: takım seçimi — !takim rojo / !equipo azul / !team red */
+export function normalizeTeam(raw: string): Team {
+  if (!raw) return null;
+  let s = trLower(raw.trim());
+  if (s.startsWith('!')) s = s.slice(1);
+  const parts = s.split(/\s+/).filter(Boolean);
+  const last = parts[parts.length - 1] ?? '';
+  const RED = ['rojo', 'red', 'kirmizi', 'kırmızı', 'rubi', 'r', 'kirmizil'];
+  const BLUE = ['azul', 'blue', 'mavi', 'b', 'azules'];
+  if (RED.includes(last)) return 'rojo';
+  if (BLUE.includes(last)) return 'azul';
+  return null;
+}
 
 export function normalizeCommand(raw: string): Cmd {
   if (!raw) return null;
+  // Normal sohbet komut tetiklemez. Bu olmadan "hire"->fire, "held"->help
+  // gibi yanlış eşleşmeler seyircinin mesajından komut üretiyordu.
+  if (!raw.trimStart().startsWith('!')) return null;
+  // Takım ayrıştırma SADECE açık komut işaretli ("!") satırlarda çalışır.
+  // Daha önce her sohbet cümlesi denendiği için "azul", "vamos bien b" gibi
+  // normal mesajlar takım vuruşu tetikliyordu (bedava kalkan + hasar).
+  if (raw.trimStart().startsWith('!')) {
+    const team = normalizeTeam(raw);
+    if (team) return 'team';
+  }
   let t = raw.trim();
   if (t.startsWith('!')) t = t.slice(1);
   t = t.split(/\s+/)[0] ?? '';

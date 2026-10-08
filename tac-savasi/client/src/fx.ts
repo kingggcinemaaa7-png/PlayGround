@@ -34,6 +34,7 @@ export class FX {
     this.glowLayer.filters = [this.glowBlur];
     this.glowLayer.blendMode = 'add';
     stage.addChild(this.glowLayer, this.airLayer, this.textLayer);
+    stage.addChild(this.heatG);   // savaş ısısı: en üstte, her şeyin üstünde basınç
     stage.addChild(this.flashRect);
 
     const texes = [glowTex(), sparkTex(), coinTex(), discTex()];
@@ -112,6 +113,35 @@ export class FX {
     void width;
   }
 
+  /**
+   * Faz 2.3 — savaş ısısı: seri/kombo arttıkça ekran kenarları kızarır,
+   * konfeti sıklaşır, hafif zoom ve sarsıntı hissedilir. 0..1 arası alır.
+   * Sürekli bir katman olduğu için tek Graphics ile yeniden çizilir.
+   */
+  private heatG = new PIXI.Graphics();
+  private heat = 0;
+  private heatTarget = 0;
+  setHeat(v: number) { this.heatTarget = Math.max(0, Math.min(1, v)); }
+  getHeat() { return this.heat; }
+  private drawHeat(dt: number) {
+    this.heat += (this.heatTarget - this.heat) * Math.min(1, dt * 2.6);
+    if (this.heat < 0.005) { this.heatG.visible = false; return; }
+    this.heatG.visible = true;
+    const h = this.heat;
+    const pulse = 0.82 + Math.sin(this.heatPhase * 5.5) * 0.18;
+    this.heatG.clear();
+    // dört kenar: sıcak kırmızı-turuncu basınç (alpha savaş sıcaklığıyla artar)
+    const a = h * 0.3 * pulse;
+    this.heatG.rect(0, 0, 1080, 150).fill({ color: 0xff3b2e, alpha: a * 0.55 });
+    this.heatG.rect(0, 1920 - 150, 1080, 150).fill({ color: 0xff3b2e, alpha: a * 0.55 });
+    this.heatG.rect(0, 0, 150, 1920).fill({ color: 0xff6d00, alpha: a * 0.5 });
+    this.heatG.rect(1080 - 150, 0, 150, 1920).fill({ color: 0xff6d00, alpha: a * 0.5 });
+    // üstte/altta ısı çizgileri
+    this.heatG.rect(0, 150, 1080, 4).fill({ color: 0xffb03a, alpha: a });
+    this.heatG.rect(0, 1920 - 154, 1080, 4).fill({ color: 0xffb03a, alpha: a });
+  }
+  private heatPhase = 0;
+
   hitSpark(x: number, y: number, color = 0xbfefff, n = 6) {
     this.burst(x, y, color, n, 320, 0.32, 20, 1, 120);
     this.burst(x, y, 0xffffff, 2, 200, 0.2, 16, 0, 0);
@@ -173,7 +203,7 @@ export class FX {
   coinRain(count = 6) {
     for (let i = 0; i < count; i++) {
       const p = this.free(); if (!p) break;
-      p.s.texture = assets.textures.get('fx.coin') ?? coinTex();
+      p.s.texture = assets.texOr('fx.coin', coinTex);
       p.s.visible = true; p.s.tint = 0xffffff; p.s.blendMode = 'normal';
       p.s.position.set(Math.random() * 1080, -40 - Math.random() * 500);
       p.s.width = p.s.height = 44 + Math.random() * 22;
@@ -212,6 +242,30 @@ export class FX {
     this.shake.add(12);
     this.shockwave(x, yBot * 0.6, 0xbfe0ff, 260, 0.5);
     audio.thunder();
+  }
+
+  /** Jagged lightning arc between two points (chain lightning, reflect zap). */
+  arc(x1: number, y1: number, x2: number, y2: number, color = 0x9fe8ff) {
+    const segs = 5;
+    let px = x1, py = y1;
+    for (let i = 1; i <= segs; i++) {
+      const k = i / segs;
+      const nx = x1 + (x2 - x1) * k + (i < segs ? (Math.random() - 0.5) * 34 : 0);
+      const ny = y1 + (y2 - y1) * k + (i < segs ? (Math.random() - 0.5) * 34 : 0);
+      const p = this.free();
+      if (p) {
+        p.s.texture = sparkTex();
+        p.s.visible = true; p.s.tint = color; p.s.blendMode = 'add';
+        p.s.position.set((px + nx) / 2, (py + ny) / 2);
+        p.s.rotation = Math.atan2(ny - py, nx - px);
+        p.s.width = Math.hypot(nx - px, ny - py) + 14;
+        p.s.height = 13;
+        p.vx = 0; p.vy = 0; p.rot = 0; p.spin = 0;
+        p.max = 0.22; p.life = 0.22; p.grav = 0; p.drag = 1;
+      }
+      px = nx; py = ny;
+    }
+    this.burst(x2, y2, color, 5, 200, 0.3, 16, 1, 0);
   }
 
   spawnRing(x: number, y: number, color: number, r: number) {
@@ -281,7 +335,8 @@ export class FX {
 
   update(dt: number): boolean {
     // returns true if simulation should be frozen (hit-stop)
-    if (this.frozen > 0) { this.frozen -= dt; return true; }
+    if (this.frozen > 0) { this.frozen -= dt; this.drawHeat(dt); return true; }
+    this.heatPhase += dt;
     for (const p of this.parts) {
       if (p.life <= 0) continue;
       p.life -= dt;
@@ -304,12 +359,28 @@ export class FX {
     }
     this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 6);
     this.zoomTarget += (1 - this.zoomTarget) * Math.min(1, dt * 3.4);
+    this.drawHeat(dt);
     return false;
+  }
+  /**
+   * Faz 2.6 — kamera adaptasyonu. Oyuncular dağılınca uzaklaş, toplanınca
+   * yaklaş; boss gelince hafif uzaklaş ki koca boss görünsün. Hedef zoom
+   * her karede yumuşak değişir, aniden zıplama olmaz.
+   */
+  private frameZoom = 1;
+  /** 0..1: oyuncuların merkeze ne kadar yayıldığı */
+  autoZoomFor(spread: number, crowd: number, bossAlive: boolean) {
+    const target = 1.045
+      - Math.min(0.07, spread * 0.07)      // dağılma -> uzaklaş
+      + Math.min(0.03, crowd * 0.012)      // kalabalık -> hafif yaklaş
+      - (bossAlive ? 0.045 : 0);          // boss -> görüş alanı aç
+    this.frameZoom = target;
   }
   applyCamera(c: PIXI.Container, world: PIXI.Container, dt: number) {
     const s = this.shake.update(dt);
     c.position.set(s.x, s.y);
-    world.scale.set(this.zoom * 1.045, this.zoom * 1.045);
+    const z = this.zoom * (this.frameZoom / 1.045);
+    world.scale.set(z, z);
     world.position.set(540 - 540 * world.scale.x, 960 - 960 * world.scale.y);
   }
   setQuality(q: number) {

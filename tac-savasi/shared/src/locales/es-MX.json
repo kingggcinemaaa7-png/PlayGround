@@ -77,5 +77,21 @@
   "monsters": "monstruos",
   "boss.trap": "¡ATRAPADA!",
   "points": "puntos",
-  "score": "PUNTOS"
+  "score": "PUNTOS",
+  "power.rage": "FURIA",
+  "power.ghost": "FANTASMA",
+  "power.vamp": "VAMPIRO",
+  "power.giant": "GIGANTE",
+  "power.reflect": "ESPEJO",
+  "power.chain": "CADENA",
+  "power.frost": "HELADA",
+  "boss.phase": "¡FURIA MÁXIMA!",
+  "final.last60": "¡ÚLTIMO MINUTO!",
+  "final.sprint": "¡TODO O NADA!",
+  "cmd.help": "ESCRIBE: !poder, !escudo, !fuego, !equipo",
+  "gifted": "¡REGALO!",
+  "power.granted": "¡{power}!",
+  "match.last10": "¡ÚLTIMOS 10!",
+  "bridge.down": "¡SIN SEÑAL! EL JUEGO CONTINÚA",
+  "bridge.back": "¡CONECTADO DE NUEVO!"
 }

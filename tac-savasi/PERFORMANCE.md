@@ -71,7 +71,9 @@ overlay off. A real GPU is far above this, but verify >=55 FPS on the streaming 
 8. **Scene/zone overlaps** — result scenes drew under the top bar and castle HP bar conflicted with the announcement zone; castle HP moved to world space, zone table updated, and the facecam variant got adaptive row counts.
 9. **Console "BOSS" did nothing** — `forceBoss()` marked every spawn slot as used instead of spawning; refactored into a shared `spawnBossNow()`.
 10. **Asset slot counter always read 0/11** — `report()` used `Object.keys()` on a `Map` (always empty). The loader was actually working; only the counter lied. Also made the audio presence check reject `text/html`, because dev/preview servers answer unknown paths with `index.html` and a 200.
-11. **Fighters collapsed onto the castle centre at 60 avatars** — everyone steered at the same point, so names and HP bars overlapped into an unreadable pile. Fighters now orbit the castle on a personal ring (`orbitR`/`orbitPhase` per avatar), which spreads them and reads like an actual arena.
+11. **Uğultu: iki müzik katmanı üst üste çalıyordu.** Sentetik pad, gerçek dosya yüklenince kendini kapatmıyordu; üstüne 1.2 sn'lik bas notalar 420 ms arayla üst üste yığılıyordu. Şimdi: gerçek dosya gelince pad zinciri durur, sentetik yedek çakışmayan pentatonik tınılara indirgendi, katman geçişi eksik dosyada sessizliğe düşmez.
+12. **Test müziğinin döngü noktası bozuktu** (tam sayı çevrim olmayan frekanslar → her 4 sn'de tıklama). `tools/gen-music.mjs` ile 8 sn'lik, döngü-güvenli iki parça üretildi (A-majör sakin, A-minör yoğun); sınır örnekleri kendini test eder.
+13. **Fighters collapsed onto the castle centre at 60 avatars** — everyone steered at the same point, so names and HP bars overlapped into an unreadable pile. Fighters now orbit the castle on a personal ring (`orbitR`/`orbitPhase` per avatar), which spreads them and reads like an actual arena.
 12. **Blank canvas after re-enabling the camera** — the previous facecam sprite was left in the display list after its texture was destroyed, so the renderer hit `null.alphaMode` and the whole render loop died. Facecam now tears down in order, and `Game.frame()` is wrapped in a try/catch that pauses the match after 240 consecutive errors instead of going black.
 
 ## Measured results
@@ -121,8 +123,61 @@ there before going live. The renderer is pooled and the auto quality scaler reac
   in software). Auto quality scaler drops particle budget (520→) when frame
   EMA > 18 ms; verify >=55 FPS on target hardware before streaming.
 
+### Vizyon profesyonelleştirme sonrası (4 faz)
+
+- Per-component CPU cost, 48 avatars, software rasterizer (ms per call):
+  `sim.update` **0.623** · `renderWorld` **0.752** · `world.update` **0.092** ·
+  `fx.update` **0.056** · `hud.update` **0.001** → ~1.4 ms of game logic per
+  frame. The remaining frame time is GPU/software rasterization of 1080x1920.
+- New per-frame Graphics rebuilds are deliberately minimal: the arena rim
+  stones are **static** (`rimStatic`, drawn once in `buildRim`); only the
+  pulsing rim, mood tint, light pool and the heat vignette are redrawn.
+  Keeping the stones static held `world.update` at 0.092 ms.
+- 30 s soak at 60 avatars + boss: **0 frame errors**, hits keep accumulating,
+  bullet count stable. Heap oscillates 37–71 MB between GCs (no monotonic
+  growth), so no leak from the new hero-card / name-strip / hit-spark paths.
+- Gift-path leak check: 60 hero cards in 27 s → `centerLayer` children drained
+  back to baseline 1 after the cards expired. The tweener `id` option is what
+  makes the entry/exit animation pair safe (see below).
+
+### Fixed bug: tweener killed its own entry animation
+
+`Tweener.to()` replaced any tween on the same object+path. Every
+fade-in + delayed fade-out pair (e.g. the hero card) therefore had its
+**entry tween deleted at creation time of the exit tween**, leaving alpha at
+0 — the hero card had never actually been visible. `to()` now only replaces
+tweens that share the same `id`; id-less tweens keep the old replace
+behaviour, so existing call sites are unaffected.
+
 ## Notes
 
 - Entity pooling: avatars/bullets/particles/damage numbers reused; bullets capped at 600 (render 300).
 - Spatial hash grid (120px cells) rebuilt per tick for neighbor queries.
 - Fixed 60Hz sim decoupled from render; hit-stop implemented as sim freeze, not clock change.
+
+## Denetim turu (2026-10-08) — bulunan ve düzeltilen gerçek hatalar
+
+Tarama sonucu bulunan, kanıtı doğrulanmış ve düzeltilmiş hatalar:
+
+| # | Hata | Etki |
+|---|---|---|
+| H1 | `World.build()` gökyüzü/okyanus/gece sprite'larını **yeniden atıyordu** (`this.sky = new Sprite(...)`) | Sahneye eklenmedikleri için **gökyüzü, okyanus ve gece geçişi hiç çizilmiyordu**. Üç ölü 1×1 beyaz sprite sahnede duruyordu. |
+| H2 | Merhamet penceresi `onKill` **sonrasında** kuruluyordu | İstemci `onKill` içinde bannerı okuyordu → **banner hiç görünmedi**. Ayrıca otomatik dirilme pencereyi 3sn'de kapatıyordu (doküman 10sn diyor). |
+| H3 | `sim.goldRain` bir kez `true` olup hiç sıfırlanmıyordu | İlk altın yağmurdan sonra **tüm maç boyunca tüm puanlar 2x**. |
+| H4 | 60 kişi doluyken yeni izleyicinin hediyesi haritanın **ilk** avatarına yazılıyordu | Ölü bir yabancının kuyruğuna gidiyordu. |
+| H5 | `!takim` bekleme süresi yoktu + takım ayrıştırma her sohbet cümlesinde deneniyordu | `"azul"`, `"vamos bien b"` gibi normal mesajlar bedava kalkan+hasar veriyordu; spam sınırsızdı. |
+| H6 | Hortum `setInterval(300ms)` ile 5sn çalışıyordu | ~17 darbe (doküman 3) + sim durumu sabit adımın dışından değişiyordu. |
+| H8 | `buildCastleHpBar()` hiç çağrılmıyordu | Kale can barı hiç görünmüyordu; `setCastleHp` ekran dışına çiziyordu. |
+| H12 | Köprüden gelen veri doğrulanmıyordu | `diamonds:"abc"` → hedef barı kalıcı `NaN`; isimsiz hediye 240 kare sonra oyunu sessizce durduruyordu. `sanitizeEvent()` eklendi. |
+| M7 | `setTicker` `setArenaHudVisible(false)` yok sayıyordu | Sonuç ekranlarının üstüne gelgit/fırtına şeridi geri dönüyordu. |
+| M10 | Synth döngüsü müzik kapatılınca yeniden zamanlanmıyordu | Müziği bir kez kapatmak **yayını kalıcı susturuyordu**. |
+| M11 | `duck()` müzik kazancını mutlak `0.35`'e sabitliyordu | Konsoldaki müzik kaydırıcısı ilk spikerden sonra ölüydü. |
+| M22 | `castleDamage(pct)` oranı `castleMaxHp` ile karşılaştırıyordu (`0..1 < 480`) | Kale **her zaman** hasarlı ve dumanlı görünüyordu. |
+| M24 | `updateSlots` içinde ölü `if` ve aynı metnin iki kez atanması | Her kare yeniden metin ölçümü. |
+| M15 | `?bridge=` değeri konsol `innerHTML`'ine yazılıyordu | `?bridge="><img onerror=…>` sayfada script çalıştırabilirdi. |
+| M8 | `en` tablosu 95 anahtardan 31'i eksikti (+5 İspanyolca kopyası) | İngilizce seçilince ham anahtar adları görünüyordu. Artık **parity testi** var. |
+| H7 | Güç hapları her karede `Container`+`Graphics`+`Text` olarak yeniden kuruluyordu | 60 oyuncu × 2 güç = kare başına ~360 Graphics. Havuzlanıp yalnızca değişince güncelleniyor. |
+
+Ek olarak **yörünge silahı** eklendi (bkz. BALANCE.md) ve ayrışma kuvveti yarıçapla
+tutarlı hale getirildi: ayrışma 52px < yarıçap 74px, aksi halde silah hiçbir rakibe
+ulaşamıyordu (test bunu yakaladı).

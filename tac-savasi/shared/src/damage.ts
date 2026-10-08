@@ -9,6 +9,8 @@ export interface MultOpts {
   streak: number;
   hasDouble?: boolean;   // x2 power-up
   hasFuerza?: boolean;   // x1.5
+  hasRage?: boolean;     // x2 rage
+  hasGiant?: boolean;    // x1.5 giant
   mutatorDouble?: boolean; // x2 mutator
   table: SimConfig['streakBonus'];
   cap: number;
@@ -18,6 +20,8 @@ export function damageMultiplier(o: MultOpts): number {
   let m = streakMult(o.streak, o.table);
   if (o.hasFuerza) m *= 1.5;
   if (o.hasDouble) m *= 2;
+  if (o.hasRage) m *= 2;
+  if (o.hasGiant) m *= 1.5;
   if (o.mutatorDouble) m *= 2;
   return Math.min(m, o.cap);
 }

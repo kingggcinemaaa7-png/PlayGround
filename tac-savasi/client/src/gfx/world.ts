@@ -66,6 +66,7 @@ export class World {
 
   constructor() {
     this.castleHolder();
+    this.buildRim();              // kenar ışık halkası + taşlar (Faz 1.1)
     this.root.addChild(
       this.stars,
       this.sky,
@@ -81,8 +82,15 @@ export class World {
       this.entityLayer,
       this.fxAir,
       this.foamG,
+      this.rimStatic,              // kenar taşları (statik)
+      this.rimG,                   // arena sınırı nabzı (dinamik)
       this.overlay,
     );
+    // atmos katmanları: ışık lekesi -> ton -> mevcut grade/vignette
+    this.lightG.blendMode = 'add';
+    this.moodG.blendMode = 'add';
+    this.overlay.addChildAt(this.lightG, 0);
+    this.overlay.addChildAt(this.moodG, 1);
   }
   private watermarkSprite() {
     const s = new PIXI.Sprite(watermarkTex());
@@ -102,13 +110,17 @@ export class World {
 
   build(arena: ArenaName, night: boolean, evening: boolean) {
     this.arena = arena;
+    this.buildCastleHpBar();   // aksi halde setCastleHp() çizimi ekran dışında kalır
     this.night = night || NIGHT_ARENAS.includes(arena);
-    this.sky = new PIXI.Sprite(skyTex(this.night ? 'night' : evening ? 'sunset' : 'day'));
+    // DİKKAT: alanlar yeniden ATANMAMALI. Sprite'lar constructor'da sahneye
+    // eklendi; yeniden new yapmak eskisini sahneden koparır ve gökyüzü/okyanus
+    // hiç çizilmez. Sadece dokuyu değiştir.
+    this.sky.texture = skyTex(this.night ? 'night' : evening ? 'sunset' : 'day');
     this.sky.width = 1080; this.sky.height = 1920;
-    this.skyNight = new PIXI.Sprite(skyFactory('night'));
+    this.skyNight.texture = skyFactory('night');
     this.skyNight.width = 1080; this.skyNight.height = 1920;
     this.skyNight.alpha = 0;
-    this.ocean = new PIXI.Sprite(waterTex(this.night ? 'night' : evening ? 'sunset' : 'day'));
+    this.ocean.texture = waterTex(this.night ? 'night' : evening ? 'sunset' : 'day');
     this.ocean.width = 1080; this.ocean.height = 430;
     this.ocean.y = 250;
 
@@ -212,7 +224,10 @@ export class World {
       this.vignette.width = 1080; this.vignette.height = 1920;
     }
     this.overlay.removeChildren();
-    this.overlay.addChild(this.vignette);
+    // atmos katmanları korunur (build sırasında yeniden eklenir)
+    this.lightG.blendMode = 'add';
+    this.moodG.blendMode = 'add';
+    this.overlay.addChild(this.lightG, this.moodG, this.vignette);
     this.buildRain();
     this.castleHp = this.castleMaxHp = 800;
   }
@@ -273,7 +288,7 @@ export class World {
 
   castleDamage(pct: number) {
     this.castleHp = pct;
-    const damaged = pct < this.castleMaxHp * 0.6;
+    const damaged = pct < 0.6;   // pct ORAN (0..1); HP ile karşılaştırılıyordu
     if (this.castle) this.castle.tint = damaged ? 0xd8b0b0 : 0xffffff;
     this.castleSmoke = damaged ? 1 : 0;
   }
@@ -287,6 +302,9 @@ export class World {
 
     this.frameParity = (this.frameParity + 1) & 1;
     const heavy = this.frameParity === 0;
+    // Faz 1.1/1.2: derinlik + ışık + sanat yönetimi (her karede)
+    this.updateAtmos(dt);
+    this.updateLight();
     // ocean bob + wave lines
     this.ocean.y = 250 + Math.sin(t * 0.8) * 6;
     const waveY = 250 + this.ocean.height;
@@ -385,7 +403,7 @@ export class World {
     }
     // storm darkening + sunset grade
     if (!this.gradeG) this.gradeG = new PIXI.Graphics();
-    if (!this.gradeG.parent) this.overlay.addChildAt(this.gradeG, 0);
+    if (!this.gradeG.parent) this.overlay.addChildAt(this.gradeG, 2);
     this.gradeG.clear();
     if (this.sunset > 0.01 && this.nightAmt < 0.9) {
       this.gradeG.rect(0, 0, 1080, 1920).fill({ color: 0xff6d00, alpha: this.sunset * 0.16 * (1 - this.nightAmt) });
@@ -407,4 +425,139 @@ export class World {
     }
   }
   private gradeG?: PIXI.Graphics;
+
+  /* ---- Faz 1.1: parallax + ışık/renk yönetimi ---- */
+  /** 0=gündüz, 1=akşam, 2=fırtına, 3=boss, 4=final — sanat yönetimi modu */
+  mood: 'day' | 'sunset' | 'storm' | 'boss' | 'final' = 'day';
+  private moodAmt = 0;
+  private breathe = 0;
+  private rimStatic = new PIXI.Graphics();
+  private rimG = new PIXI.Graphics();
+  private moodG = new PIXI.Graphics();
+  private lightG = new PIXI.Graphics();
+  private rimPts: { x: number; y: number; a: number }[] = [];
+  private moodColor = 0xff6d00;
+  private moodTarget = 0;
+  private moodPow = 1;
+  setMood(m: 'day' | 'sunset' | 'storm' | 'boss' | 'final') { this.mood = m; }
+  /** Faz 4: kamera nefesi aç/kapa (konsoldan). */
+  breath = true;
+
+  /** Arena kenarı ışık halkası + taşlar (bir kere kurulur). */
+  private buildRim() {
+    this.rimStatic.clear();
+    const cx = 540, cy = 960, rx = 452, ry = 452 * 1.2;
+    // dış ışık halkası: arena çevresinde sıcak parlama
+    for (let i = 0; i < 3; i++) {
+      this.rimStatic.ellipse(cx, cy, rx + i * 7, ry + i * 7)
+        .stroke({ color: 0xffe9a8, width: 3 - i, alpha: 0.16 - i * 0.045 });
+    }
+    // kenar taşları (düzensiz, doğal)
+    for (let i = 0; i < 26; i++) {
+      const an = (i / 26) * Math.PI * 2 + 0.21;
+      const wob = 1 + Math.sin(i * 2.7) * 0.028 + Math.cos(i * 1.3) * 0.02;
+      const x = cx + Math.cos(an) * (rx + 20) * wob;
+      const y = cy + Math.sin(an) * (ry + 20) * wob;
+      const s = 9 + (i % 4) * 4;
+      const shade = 0.5 + Math.sin(i * 1.9) * 0.22;
+      this.rimStatic.ellipse(x, y + s * 0.5, s * 1.35, s * 0.62)
+        .fill({ color: 0x6b5a44, alpha: 0.5 });
+      this.rimStatic.ellipse(x, y, s, s * 0.8)
+        .fill({ color: 0x8d7a5e, alpha: shade });
+      this.rimStatic.ellipse(x - s * 0.22, y - s * 0.26, s * 0.6, s * 0.4)
+        .fill({ color: 0xbfae8c, alpha: shade * 0.8 });
+      this.rimPts.push({ x, y, a: 0.4 + shade * 0.4 });
+    }
+    // iç arena çizgisi: oyuncuların savaştığı sınır burada belli olsun
+    this.rimStatic.ellipse(cx, cy, 430, 430 * 1.2)
+      .stroke({ color: 0xffffff, width: 2, alpha: 0.1 });
+  }
+
+  /** Sanat yönetimi rengi: moda göre ekran tonu. */
+  private moodSpec(): { c: number; a: number } {
+    switch (this.mood) {
+      case 'storm': return { c: 0x2a3c66, a: 0.4 };
+      case 'boss': return { c: 0xff2e3f, a: 0.2 };
+      case 'final': return { c: 0xffa03a, a: 0.24 };
+      case 'sunset': return { c: 0xff6d00, a: 0.17 };
+      default: return { c: 0xffe9a8, a: 0.05 };
+    }
+  }
+
+  /** Faz 1.2: her karede derinlik + ışık + nefes. */
+  private updateAtmos(dt: number) {
+    const t = this.time;
+    this.breathe += dt;
+    // kamera nefesi: çok hafif salınım (canlılık hissi)
+    const amp = this.breath ? 1 : 0;
+    const bx = Math.sin(this.breathe * 0.55) * 3.2 * amp;
+    const by = Math.cos(this.breathe * 0.42) * 2.6 * amp;
+    // parallax: uzak katman yavaş, yakın katman hızlı kayar
+    const wind = Math.sin(t * 0.18) * 0.5 + 0.5;
+    this.sky.position.set(bx * 0.15 + wind * 4, by * 0.15);
+    this.skyNight.position.set(bx * 0.18, by * 0.18);
+    this.stars.position.set(bx * 0.1, by * 0.1);
+    this.ocean.x = bx * 0.5;
+    this.waveG.x = bx * 0.62;
+    this.foamG.x = bx * 0.62;
+    this.propsBack.x = bx * 0.78;
+    this.sandLayer.x = bx * 0.9;
+    this.propsFront.x = bx * 1.05;
+
+    // sanat yönetimi tonu
+    const spec = this.moodSpec();
+    if (spec.a !== this.moodTarget || spec.c !== this.moodColor) {
+      this.moodTarget = spec.a;
+      this.moodColor = spec.c;
+    }
+    this.moodAmt += (this.moodTarget - this.moodAmt) * Math.min(1, dt * 2.4);
+    this.moodPow = this.moodAmt;
+    this.moodG.clear();
+    if (this.moodPow > 0.005) {
+      const pulse = 1 + Math.sin(t * 2.1) * 0.06;
+      this.moodG.rect(0, 0, 1080, 1920)
+        .fill({ color: this.moodColor, alpha: this.moodPow * pulse });
+    }
+
+    // kenar ışığı: boss/final'de nabız atar
+    const rimPulse = this.mood === 'boss' ? 0.5 + Math.sin(t * 5.5) * 0.4
+      : this.mood === 'final' ? 0.45 + Math.sin(t * 3.4) * 0.35 : 0;
+    const rimCol = this.mood === 'final' ? 0xffc46b : this.mood === 'boss' ? 0xff5b5b : 0xffe9a8;
+    this.rimG.clear();
+    const glowA = 0.1 + rimPulse * 0.42;
+    this.rimG.ellipse(540, 960, 456, 456 * 1.2)
+      .stroke({ color: rimCol, width: 4 + rimPulse * 4, alpha: glowA });
+    this.rimG.ellipse(540, 960, 470 + rimPulse * 10, (470 + rimPulse * 10) * 1.2)
+      .stroke({ color: rimCol, width: 2, alpha: glowA * 0.4 });
+    if (rimPulse > 0.02) {
+      for (const p of this.rimPts) {
+        const a = p.a * (0.5 + rimPulse * 0.8) * (this.night ? 0.75 : 1);
+        this.rimG.ellipse(p.x, p.y, 11, 9).fill({ color: rimCol, alpha: a * 0.5 });
+      }
+    }
+  }
+
+  /** Arena üstünde yumuşak ışık lekesi (merkez odak). */
+  private updateLight() {
+    const t = this.time;
+    this.lightG.clear();
+    // sıcak güneş lekesi soldan
+    const sunX = 300 + Math.sin(t * 0.07) * 90;
+    this.lightG.ellipse(sunX, 520, 520, 460).fill({ color: 0xfff0b8, alpha: 0.06 });
+    // gece ay ışığı sağdan
+    if (this.nightAmt > 0.05) {
+      this.lightG.ellipse(820, 460, 440, 400)
+        .fill({ color: 0xa8c8ff, alpha: 0.07 * this.nightAmt });
+    }
+    // boss kırmızı alan basıncı
+    if (this.mood === 'boss') {
+      const p = 0.5 + Math.sin(t * 5.5) * 0.5;
+      this.lightG.ellipse(540, 960, 520, 600).fill({ color: 0xff2e3f, alpha: 0.05 + p * 0.05 });
+    }
+    // final: altın basınç
+    if (this.mood === 'final') {
+      const p = 0.5 + Math.sin(t * 3.2) * 0.5;
+      this.lightG.ellipse(540, 1100, 600, 520).fill({ color: 0xffa03a, alpha: 0.05 + p * 0.06 });
+    }
+  }
 }

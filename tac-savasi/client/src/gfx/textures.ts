@@ -273,6 +273,114 @@ export const rainTex = () => tex('rain', 24, 96, (g, w, h) => {
   g.fillRect(w * 0.4, 0, w * 0.22, h);
 });
 
+
+/* ---------------- orbit weapon: bumerang + zincir ---------------- */
+/**
+ * Bumerang: kıvrık, iki uçlu keskin palet. Merkezde ısı parıltısı, uçlarda
+ * beyaz kenar. Dönerek uçan, arkasında iz bırakan silah.
+ */
+export const boomerangTex = () => tex('boomerang', 128, 128, (g, w) => {
+  const c = w / 2;
+  // aura
+  const aura = g.createRadialGradient(c, c, 4, c, c, c);
+  aura.addColorStop(0, 'rgba(255,240,190,0.95)');
+  aura.addColorStop(0.4, 'rgba(255,190,90,0.45)');
+  aura.addColorStop(1, 'rgba(255,150,60,0)');
+  g.fillStyle = aura; g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+  // gövde: hilal (V formu) yolu
+  g.beginPath();
+  g.moveTo(c - 52, c - 34);
+  g.quadraticCurveTo(c, c + 20, c + 52, c - 34);
+  g.quadraticCurveTo(c + 40, c - 6, c + 30, c + 4);
+  g.quadraticCurveTo(c, c + 26, c - 30, c + 4);
+  g.quadraticCurveTo(c - 40, c - 6, c - 52, c - 34);
+  g.closePath();
+  const body = g.createLinearGradient(c - 52, c - 34, c + 52, c + 20);
+  body.addColorStop(0, '#fff6d8');
+  body.addColorStop(0.5, '#ffb43c');
+  body.addColorStop(1, '#ff6a1e');
+  g.fillStyle = body; g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.stroke();
+  // keskin uç parıltısı
+  g.fillStyle = '#fffdf0';
+  g.beginPath(); g.arc(c - 48, c - 31, 5, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(c + 48, c - 31, 5, 0, Math.PI * 2); g.fill();
+});
+
+/** Zincir halkasının küçük parlak topu (iz). */
+export const chainOrbTex = () => tex('chainorb', 64, 64, (g, w) => {
+  const c = w / 2;
+  const gr = g.createRadialGradient(c, c, 1, c, c, c);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.28, 'rgba(255,255,255,0.95)');
+  gr.addColorStop(0.55, 'rgba(140,225,255,0.55)');
+  gr.addColorStop(1, 'rgba(90,190,255,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(c, c, c, 0, Math.PI * 2); g.fill();
+});
+
+/** Buff rozeti (güç/hız/seri) — küçük yuvarlak madalyon. */
+export const badgeTex = () => tex('badge', 96, 96, (g, w) => {
+  const c = w / 2;
+  g.fillStyle = 'rgba(10,8,22,0.92)';
+  g.beginPath(); g.arc(c, c, c - 4, 0, Math.PI * 2); g.fill();
+  const ring = g.createLinearGradient(0, 0, w, w);
+  ring.addColorStop(0, '#ffffff');
+  ring.addColorStop(1, '#ffd23f');
+  g.strokeStyle = ring; g.lineWidth = 6; g.stroke();
+});
+
+/* ---------------- eski yıldız silahı ---------------- */
+/**
+ * Profil fotoğrafının etrafinde dönen silah. Üç katmanlı çizim:
+ *  - dış halka: sıcak aura (additive blend ile parlar)
+ *  - gövde: 5 köşeli keskin yıldız, merkezde beyaz çekirdek
+ *  - iç çentik: hareket hissi için koyu hilal
+ * `n` köşe sayısı, `hue` gövde rengi.
+ */
+export const orbitStarTex = (n = 5, hue = '#ffd23f', key = `os${n}${hue}`) =>
+  tex(key, 128, 128, (g, w) => {
+    const c = w / 2, R = w * 0.46;
+    // aura
+    const aura = g.createRadialGradient(c, c, R * 0.15, c, c, R);
+    aura.addColorStop(0, hue);
+    aura.addColorStop(0.45, hue + '88');
+    aura.addColorStop(1, hue + '00');
+    g.globalAlpha = 0.85; g.fillStyle = aura;
+    g.beginPath(); g.arc(c, c, R, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+    // yıldız gövdesi: iki tonlu (koyu kenar + parlak yüz)
+    const star = (rad: number, inset: number) => {
+      g.beginPath();
+      for (let i = 0; i < n * 2; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / n;
+        const rr = i % 2 ? rad * inset : rad;
+        const x = c + Math.cos(a) * rr, y = c + Math.sin(a) * rr;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.closePath();
+    };
+    g.fillStyle = hue; star(R, 0.46); g.fill();
+    g.fillStyle = '#ffffff'; star(R * 0.62, 0.46); g.fill();
+    // merkez çekirdek
+    g.fillStyle = '#fffdf0';
+    g.beginPath(); g.arc(c, c, R * 0.2, 0, Math.PI * 2); g.fill();
+  });
+
+/** Silahın bıraktığı kuyruk parçası (ufukta uçan ince alev). */
+export const orbitTrailTex = () => tex('otrail', 96, 32, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, w, 0);
+  gr.addColorStop(0, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.55, 'rgba(255,225,150,0.55)');
+  gr.addColorStop(1, 'rgba(255,255,255,0.95)');
+  g.fillStyle = gr;
+  g.beginPath();
+  g.moveTo(0, h / 2);
+  g.quadraticCurveTo(w * 0.6, 0, w, h * 0.36);
+  g.lineTo(w, h * 0.64);
+  g.quadraticCurveTo(w * 0.6, h, 0, h / 2);
+  g.closePath(); g.fill();
+});
+
 export const starTex = () => tex('star', 96, 96, (g, w) => {
   const r = w / 2;
   g.fillStyle = '#fff';

@@ -55,8 +55,18 @@ interface Item {
 export class Tweener {
   private items: Item[] = [];
 
+  /**
+   * `id` verilen tween'ler aynı obj+path üzerindeki diğer tween'leri ÖLDÜRMEZ;
+   * böylece "giriş -> gecikmeli çıkış" zinciri kurulabilir. Aynı `id` ile
+   * tekrar çağrılırsa o tween değiştirilir. `id` verilmemiş tween'ler
+   * (mevcut tüm çağrılar) eski davranışı korur: aynı yolu değiştirirler.
+   */
   to(obj: any, path: string, to: number, dur = 0.3, opts: { ease?: Easing; delay?: number; onDone?: () => void; id?: string; onUpdate?: (v: number) => void; from?: number } = {}): Item {
-    this.kill(obj, path);
+    this.items = this.items.filter((i) => {
+      if (i.obj !== obj || i.path !== path) return true;
+      if (opts.id !== undefined) return i.id !== opts.id;
+      return i.id === undefined;
+    });
     const item: Item = {
       obj, path, to,
       from: opts.from ?? getPath(obj, path),

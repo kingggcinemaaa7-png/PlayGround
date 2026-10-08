@@ -1,8 +1,9 @@
 // Main game orchestrator: match loop, entity rendering, live input, scoring.
 import * as PIXI from 'pixi.js';
 import {
-  Sim, giftTier, normalizeCommand, t, fmtNum, upper, truncateNick,
-  comboMult, defaultSimConfig, type LiveEvent, type AvatarState,
+  Sim, giftTier, normalizeCommand, normalizeTeam, type Team, t, fmtNum, upper, truncateNick,
+  comboMult, defaultSimConfig, GiftRegistry,
+  type LiveEvent, type AvatarState, type GiftDef, type GiftAction,
 } from '@tac/shared';
 import { FX } from './fx.js';
 import { audio } from './audio.js';
@@ -13,10 +14,60 @@ import { EntityLayer } from './gfx/entities.js';
 import { tweener, Ease } from './gfx/tween.js';
 import { Facecam } from './gfx/facecam.js';
 import { assets } from './assets.js';
+import { hideSplash } from './boot.js';
 
 type Phase = 'intro' | 'play' | 'end' | 'table' | 'awards' | 'podium';
 
+/**
+ * Köprüden gelen olayı doğrular (H12). Bot/bozuk istemci gönderdiği için
+ * TEK bir bozuk alan tüm oyunu bozuyordu: `diamonds:"abc"` goal barını NaN
+ * yapıp kalıcı bozuyor, isimsiz hediye truncateNick'i patlatıp 240 kare
+ * sonra oyunu sessizce durduruyordu. Sınırlar burada tek yerde tanımlı.
+ */
+const EVENT_TYPES = new Set(['join', 'chat', 'like', 'follow', 'gift', 'share']);
+function sanitizeEvent(raw: unknown): LiveEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const type = String(o.type ?? '');
+  if (!EVENT_TYPES.has(type)) return null;
+  const userId = String(o.userId ?? '').slice(0, 64);
+  if (!userId) return null;
+  const name = String(o.name ?? '?').slice(0, 32) || '?';
+  const num = (v: unknown, lo: number, hi: number, dflt: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+  };
+  const out: LiveEvent = {
+    type: type as LiveEvent['type'],
+    id: String(o.id ?? `${type}-${userId}`).slice(0, 96),
+    userId, name,
+    pic: typeof o.pic === 'string' ? o.pic.slice(0, 500) : null,
+    repeatEnd: o.repeatEnd === true,
+  };
+  if (o.text !== undefined) out.text = String(o.text).slice(0, 120);
+  if (o.giftName !== undefined) out.giftName = String(o.giftName).slice(0, 64);
+  if (o.n !== undefined) out.n = Math.round(num(o.n, 1, 9999, 1));
+  if (o.diamonds !== undefined) out.diamonds = num(o.diamonds, 0, 1e6, 1);
+  return out;
+}
+
+/** Hortum: dokümana uygun 3 darbe x 15 hasar, 75px yarıçap. */
+const TORNADO_TICKS = 3;
+const TORNADO_TICK_SEC = 1.2;
+const TORNADO_RADIUS = 75;
+const TORNADO_DMG = 15;
+
+/** Takım vuruşu bekleme süresi (saniye) — spam'i engeller. */
+const TEAM_COOLDOWN_SEC = 12;
+
+/** sim'den gelen vuruş olayı (hasar geri bildirimi) */
+interface HitEvent {
+  type: 'hit'; x: number; y: number; victim: string;
+  dmg: number; crit: boolean; reflect: boolean;
+}
+
 interface Cfg {
+  fx: { heat: boolean; breath: boolean };
   match: { durationSec: number; introSec: number; endCountdownSec: number; tableSec: number; awardsSec: number; podiumSec: number; maxFighters: number };
   avatar: { hp: number };
   gifts: { goalStart: number; goalGrowth: number; goldRainSec: number };
@@ -32,14 +83,6 @@ const ARENAS: ArenaName[] = ['beach', 'volcano', 'ice', 'night-forest', 'sky-isl
 const BOSSES: { key: 'kraken' | 'crab'; hpMul: number }[] = [
   { key: 'kraken', hpMul: 1 }, { key: 'crab', hpMul: 1.25 },
 ];
-const GIFTS_UI = [
-  { icon: '🌹', key: 'gift.t1', value: '1' },
-  { icon: '🍦', key: 'gift.t2', value: '5' },
-  { icon: '💖', key: 'gift.t3', value: '50' },
-  { icon: '☄️', key: 'gift.t4', value: '200' },
-  { icon: '🌪️', key: 'gift.t5', value: '1000' },
-];
-
 export class Game {
   app!: PIXI.Application;
   camera = new PIXI.Container();
@@ -63,6 +106,7 @@ export class Game {
   evening = false;
   mutator: 'none' | 'double' | 'goldrain' | 'speed' = 'none';
   bossIdx = 0;
+  bossPhase = 1;
   bossSpawned: boolean[] = [];
   hunterName = '';
   gifters: { userId: string; name: string; diamonds: number }[] = [];
@@ -70,23 +114,57 @@ export class Game {
   comboAt = new Map<string, number[]>();
   cdShield = new Map<string, number>();
   cdFire = new Map<string, number>();
+  cdPower = new Map<string, number>();
+  cdTeam = new Map<string, number>();
+  private tornadoTicks = new Map<string, { left: number; cd: number; hitAt: Map<string, number> }>();
   pendingGifts = new Map<string, LiveEvent[]>();
   joinedAt = new Map<string, number>();
+  gifts = new GiftRegistry();
+  private static readonly GIFT_STORE = 'tac-gifts-v1';
   globalRanking: { name: string; damage: number; crowns: number; matches: number }[] = [];
   prevPos = new Map<string, { x: number; y: number }>();
   quality = 1;
   frameEMA = 16;
   stripTimer = 0;
   leaderId: string | null = null;
+  /** 0..1 oyuncu yayılımı (kamera adaptasyonu, Faz 2.6) */
+  private avatarSpread = 0.3;
   leaderTitle = '';
   lastTs = 0;
   acc = 0;
   lastLightning = 0;
   telemetry: Record<string, number | string>[] = [];
-  stats = { gifts: [0, 0, 0, 0, 0], goalFillSec: -1, mercyRevives: 0, bossKillSec: -1, viewers: 0, watchSum: 0, watchCount: 0 };
+  stats = { gifts: [0, 0, 0, 0, 0], goalFillSec: -1, mercyRevives: 0, bossKillSec: -1, viewers: 0, watchSum: 0, watchCount: 0, teamPicks: 0, hits: 0, bridgeDrops: 0 };
   awards: { title: string; name: string; detail: string; userId?: string; color: number }[] = [];
   private endSceneShown = false;
   private hudInfoOn = false;
+
+  /* ---- hediye kayıt defteri (konsoldan yönetilir, localStorage'da saklanır) ---- */
+  loadGifts() {
+    try {
+      const raw = localStorage.getItem(Game.GIFT_STORE);
+      if (raw) this.gifts.fromJSON(JSON.parse(raw));
+    } catch { /* varsayılan katalog */ }
+  }
+  saveGifts() {
+    try { localStorage.setItem(Game.GIFT_STORE, JSON.stringify(this.gifts.toJSON())); } catch { /* kota */ }
+  }
+  giftList(): GiftDef[] { return this.gifts.list(); }
+  giftAdd(def: GiftDef): GiftDef { const d = this.gifts.upsert(def); this.saveGifts(); return d; }
+  giftRemove(id: string): boolean { const ok = this.gifts.remove(id); this.saveGifts(); return ok; }
+  giftSet(id: string, patch: Partial<GiftDef>): boolean {
+    const cur = this.gifts.lookup(id);
+    if (!cur) return false;
+    if (patch.diamonds !== undefined) this.gifts.setDiamonds(id, patch.diamonds);
+    if (patch.action !== undefined) this.gifts.setAction(id, patch.action as GiftAction);
+    if (patch.enabled !== undefined) this.gifts.setEnabled(id, patch.enabled);
+    if (patch.name !== undefined || patch.icon !== undefined) {
+      this.gifts.upsert({ ...cur, ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.icon !== undefined ? { icon: patch.icon } : {}) });
+    }
+    this.saveGifts();
+    return true;
+  }
+  giftReset() { this.gifts.reset(); this.saveGifts(); }
   private watchAcc = 0;
   /** how many real audio files were found at boot (0 = synth only) */
   audioLoaded = 0;
@@ -101,21 +179,39 @@ export class Game {
 
   constructor(cfg: Cfg) {
     this.cfg = cfg;
+    // görsel anahtarlar: config.json ya da konsoldan gelebilir, yoksa açık
+    cfg.fx = { heat: cfg.fx?.heat !== false, breath: cfg.fx?.breath !== false };
     this.locale = cfg.locale.default;
     this.dual = cfg.locale.dual;
     this.duration = cfg.match.durationSec;
   }
 
-  async boot(el: HTMLElement) {
-    // asset manifest first: real art/audio overrides the procedural fallbacks
-    await assets.load('assets').catch((e) => console.warn('[tac] assets', e));
-    await this.loadAudioAssets();
+  async boot(el: HTMLElement, safemode = false, onStage?: (s: string) => void) {
+    const stage = (s: string) => { try { onStage?.(s); } catch { /* noop */ } };
+    if (safemode) audio.setEnabled(false);
+    // Asset/audio probing runs in the BACKGROUND: the game boots instantly on
+    // procedural fallbacks, and real files swap in live when they arrive
+    // (see assets.version). A slow tunnel must never delay the first frame.
+    stage('varliklar araniyor');
+    if (!safemode) {
+      assets.load('assets')
+        .catch((e) => console.warn('[tac] assets', e))
+        .then(() => this.loadAudioAssets()
+          .catch((e) => console.warn('[tac] audio', e))
+          .then(() => audio.syncMusicLayers()));
+    } else {
+      console.info('[tac] safemode: varlık/ses taraması atlandı');
+    }
+    // konsoldan seçilip kaydedilmiş müzikler (IndexedDB) her modda geri yüklenir
+    audio.restoreSaved().catch(() => undefined);
 
+    stage('pixi baslatiliyor');
     const { DOMAdapter, BrowserAdapter } = PIXI as unknown as { DOMAdapter: { set(a: unknown): void }; BrowserAdapter: unknown };
     try { DOMAdapter.set(BrowserAdapter); } catch { /* already set */ }
     this.app = new PIXI.Application();
     const initPr = this.app.init({ width: 1080, height: 1920, background: 0x06233b, antialias: true, preference: 'webgl' });
     await Promise.race([initPr, new Promise<never>((_, r) => setTimeout(() => r(new Error('pixi-init-timeout')), 12000))]);
+    stage('sahne kuruluyor');
     el.appendChild(this.app.canvas);
     this.fit();
     window.addEventListener('resize', () => this.fit());
@@ -131,10 +227,13 @@ export class Game {
     this.app.stage.addChild(this.camera, this.hud.root);
 
     this.sim = new Sim({ ...defaultSimConfig(), avatarHp: this.cfg.avatar.hp }, (Math.random() * 1e9) | 0);
-    this.sim.onKill = (k) => this.onKill(k.killer, k.victim, k.streak, k.cutStreak, k.dmg);
+    this.sim.onKill = (k) => this.onKill(k.killer, k.victim, k.streak, k.cutStreak, k.dmg, k.chain);
     this.sim.onEvent = (e) => this.onSimEvent(e);
     this.sim.onRespawn = (userId) => this.flushPending(userId);
+    this.ent.orbitCount = this.sim.cfg.orbit.count;
+    this.ent.orbitRadius = this.sim.cfg.orbit.radius;
 
+    stage('mac basliyor');
     audio.syncMusicLayers();
     this.startMatch();
     this.app.canvas.addEventListener('pointerdown', () => audio.ensure());
@@ -178,21 +277,27 @@ export class Game {
     }
     const EXT = ['.ogg', '.wav', '.mp3', '.m4a'];
     let n = 0;
-    const skipped: string[] = [];
-    for (const [name, rel] of names) {
+    // bounded parallelism: fast on localhost, polite on a slow tunnel
+    const CONC = 6;
+    const queue = names.filter(([, rel]) => {
       const file = rel.split('/').pop()!;
       // only try what the manifest lists (or everything when it has no audio yet)
-      const listed = !files.length || files.some((f) => f.includes(file) || f.includes(file.replace(/\.\w+$/, '')));
-      if (!listed) { skipped.push(name); continue; }
-      const stem = rel.replace(/\.[^./]+$/, '');
-      const base = file.replace(/\.[^.]+$/, '');
-      // accept any common extension so you can drop in a WAV or MP3 without renaming
-      const tried = [rel, ...EXT.filter((e) => !rel.endsWith(e)).map((e) => `${stem}${e}`)];
-      for (const cand of tried) {
-        if (await audio.load(name, `assets/${cand}`)) { n++; break; }
+      return !files.length || files.some((f) => f.includes(file) || f.includes(file.replace(/\.\w+$/, '')));
+    });
+    const workers = Array.from({ length: Math.min(CONC, queue.length) }, async () => {
+      for (;;) {
+        const job = queue.shift();
+        if (!job) return;
+        const [name, rel] = job;
+        const stem = rel.replace(/\.[^./]+$/, '');
+        // accept any common extension so you can drop in a WAV or MP3 without renaming
+        const tried = [rel, ...EXT.filter((e) => !rel.endsWith(e)).map((e) => `${stem}${e}`)];
+        for (const cand of tried) {
+          if (await audio.load(name, `assets/${cand}`)) { n++; break; }
+        }
       }
-      if (!audio.has(name) && file.startsWith('sfx-')) skipped.push(name);
-    }
+    });
+    await Promise.all(workers);
     this.audioLoaded = n;
     return n;
   }
@@ -205,6 +310,7 @@ export class Game {
     this.goal = 0;
     this.goalTarget = this.cfg.gifts.goalStart;
     this.goldRainUntil = -1;
+    this.nextBossAt = 0;
     this.mutator = (['none', 'double', 'goldrain', 'speed'] as const)[this.matchNo % 4];
     this.sim.cfg.mutator = this.mutator;
     this.arena = ARENAS[(this.matchNo - 1) % ARENAS.length];
@@ -217,7 +323,7 @@ export class Game {
     this.bossSpawned = [false, false, false, false, false];
     this.stripTimer = 6;
     this.endSceneShown = false;
-    this.stats = { gifts: [0, 0, 0, 0, 0], goalFillSec: -1, mercyRevives: 0, bossKillSec: -1, viewers: this.sim.avatars.size, watchSum: 0, watchCount: 0 };
+    this.stats = { gifts: [0, 0, 0, 0, 0], goalFillSec: -1, mercyRevives: 0, bossKillSec: -1, viewers: this.sim.avatars.size, watchSum: 0, watchCount: 0, teamPicks: 0, hits: 0, bridgeDrops: 0 };
     for (const [id] of this.ent.avatars) this.ent.removeAvatar(id);
     this.picCache.clear();
     const arenaLabel = t(this.locale, `arena.${this.arena}`);
@@ -285,7 +391,14 @@ export class Game {
     }
   }
 
+  private booted = false;
+
   private frameBody() {
+    if (!this.booted) {
+      this.booted = true;
+      (window as unknown as { __tacBooted?: boolean }).__tacBooted = true;
+      hideSplash();
+    }
     const now = performance.now();
     let dt = (now - this.lastTs) / 1000;
     this.lastTs = now;
@@ -298,6 +411,7 @@ export class Game {
     else if (this.frameEMA < 12.5 && this.quality < 1) { this.quality += 0.05; this.fx.setQuality(this.quality); }
 
     if (this.paused) { this.renderWorld(0, 1); this.hud.update(0); return; }
+    this.hitBudget = 8; // kare başına kıvılcım tavanı (olay yağmuruna karşı)
     const frozen = this.fx.update(dt);
     if (!frozen) {
       this.acc += dt;
@@ -308,8 +422,81 @@ export class Game {
     const alpha = Math.max(0, Math.min(1, this.acc * 60));
     this.renderWorld(dt, alpha);
     this.hud.update(dt);
+    // Faz 2.6: kamera adaptasyonu — dağılma ve kalabalığa göre yumuşak zoom
+    this.fx.autoZoomFor(this.avatarSpread, this.sim.avatars.size, !!this.sim.boss?.alive);
     this.fx.applyCamera(this.camera, this.world.root, dt);
     if (this.hudInfoOn) this.hud.setInfoText(`${Math.round(this.fps)}fps · ${this.phase} · ${this.sim.avatars.size} · m${this.sim.bullets.length}`);
+  }
+
+  /**
+   * Faz 2.3 — savaş ısısı: en yüksek seri + canlı oyuncu sayısı + boss/final
+   * durumundan 0..1 üretilir. Ekran kenarları ısınır, müzik yoğunlaşır.
+   */
+  private updateHeat() {
+    let maxStreak = 0, alive = 0;
+    for (const a of this.sim.avatars.values()) {
+      if (!a.alive) continue;
+      alive++;
+      if (a.streak > maxStreak) maxStreak = a.streak;
+    }
+    const streakH = Math.min(1, maxStreak / 12);
+    const crowdH = Math.min(1, Math.max(0, (alive - 2) / 10));
+    const bossH = this.sim.boss?.alive ? 0.35 : 0;
+    const remain = this.duration - this.matchT;
+    const finalH = remain <= 60 ? 0.45 : 0;
+    const combat = Math.min(1, Math.min(1, this.sim.bullets.length / 60) * 0.6);
+    const target = Math.min(1, streakH * 0.42 + crowdH * 0.18 + bossH + finalH + combat);
+    this.fx.setHeat(target);
+    // ısı yükseldikçe müzik yoğunlaşır (boss hariç: boss kendi müziğini kullanır)
+    if (!this.sim.boss?.alive) {
+      const intense = target > 0.62;
+      if (audio.intense !== intense) {
+        audio.intense = intense;
+        audio.syncMusicLayers();
+      }
+    }
+    // yüksek ısıda hafif zoom gerilimi
+    if (target > 0.7 && this.fx.zoomTarget < 1.02) this.fx.punchZoom(1.015);
+  }
+
+  /**
+   * Faz 3.2 — son 60 saniye finali: sayaç vurgusu, altın basınç, son sıra
+   * önizlemesi ve bitiş sertleşmesi. Tek seferlik geçişler.
+   */
+  private finaleShown = { s60: false, s30: false, s10: false };
+  private updateFinale() {
+    const remain = this.duration - this.matchT;
+    if (remain > 60) { this.finaleShown = { s60: false, s30: false, s10: false }; return; }
+    const tr = this.secondLocale;
+    const mark = (key: 's60' | 's30' | 's10', remainLimit: number, locKey: string, color: number, size: number) => {
+      if (this.finaleShown[key] || remain > remainLimit) return;
+      this.finaleShown[key] = true;
+      this.sayAnnounce(locKey,
+        upper(this.locale, t(this.locale, locKey)),
+        this.dual ? upper(tr, t(tr, locKey)) : undefined,
+        color, size);
+      this.fx.flash(0.22);
+      this.fx.shake.add(12);
+      this.fx.confettiBurst(540, 500, 90);
+      audio.fanfare();
+      audio.intense = true;
+      audio.syncMusicLayers();
+    };
+    mark('s60', 60, 'final.last60', 0xffa03a, 60);
+    mark('s30', 30, 'final.sprint', 0xff5b5b, 58);
+    mark('s10', 10, 'match.last10', 0xff3b5c, 54);
+  }
+
+  /** Sanat yönetimi: boss > final > fırtına > akşam > gündüz (Faz 1.2). */
+  private updateMood(progress: number) {
+    const remain = this.duration - this.matchT;
+    const mood: 'day' | 'sunset' | 'storm' | 'boss' | 'final' =
+      this.sim.boss?.alive ? 'boss'
+        : remain <= 60 && this.phase === 'play' ? 'final'
+          : this.stormAmt > 0.35 ? 'storm'
+            : this.world.nightAmt > 0.15 || progress > 0.62 ? 'sunset'
+              : 'day';
+    if (mood !== this.world.mood) this.world.setMood(mood);
   }
 
   private renderWorld(dt: number, alpha: number) {
@@ -321,8 +508,24 @@ export class Game {
     this.world.dayProgress = progress;
     // warm grade fades in through the middle of the match, then night takes over
     const sunset = Math.max(0, Math.min(1, (progress - 0.35) / 0.3)) * 0.8;
+    // Faz 1.2/3.2: sanat yönetimi modu — en güçlü bağlam kazanır
+    this.updateMood(progress);
+    this.world.breath = this.cfg.fx.breath;
+    if (!this.cfg.fx.heat) this.fx.setHeat(0);
+    if (!this.automation.night) this.world.dayProgress = 0;
     this.world.update(dt, { tide: this.tideAmt, storm: this.stormAmt, sunset, arena: this.arena });
     this.world.castleDamage(this.sim.castleHp / this.sim.castleMax);
+
+    // yayılım: canlı oyuncular merkeze ne kadar uzak (0..1)
+    let spread = 0, live = 0;
+    for (const a of this.sim.avatars.values()) {
+      if (!a.alive) continue;
+      live++;
+      const d = Math.hypot(a.x - 540, (a.y - 960) / 1.2) / 430;
+      if (d > spread) spread = d;
+    }
+    const targetSpread = live > 1 ? spread : 0.15;
+    this.avatarSpread += (targetSpread - this.avatarSpread) * Math.min(1, dt * 1.6);
 
     // leader
     let lead: AvatarState | null = null;
@@ -334,12 +537,19 @@ export class Game {
     for (const [id, a] of this.sim.avatars) {
       const v = this.ent.avatar(id);
       const prev = this.prevPos.get(id) ?? { x: a.x, y: a.y };
-      const powers: { label: string; color: number; left: number }[] = [];
-      if (time < a.fuerzaUntil) powers.push({ label: t(this.locale, 'power.fuerza'), color: 0xd9382b, left: a.fuerzaUntil - time });
-      if (time < a.speedUntil) powers.push({ label: t(this.locale, 'power.velocidad'), color: 0x2b9bd9, left: a.speedUntil - time });
-      if (time < a.poisonUntil) powers.push({ label: t(this.locale, 'power.veneno'), color: 0x7b3fc4, left: a.poisonUntil - time });
-      if (time < a.healUntil) powers.push({ label: t(this.locale, 'power.curacion'), color: 0x2fb85a, left: a.healUntil - time });
-      if (time < a.doubleUntil) powers.push({ label: t(this.locale, 'power.doble'), color: 0xd99a1b, left: a.doubleUntil - time });
+      const powers: { label: string; color: number; left: number; total: number }[] = [];
+      const timed: [string, number][] = [
+        ['fuerza', a.fuerzaUntil], ['velocidad', a.speedUntil], ['veneno', a.poisonUntil],
+        ['curacion', a.healUntil], ['doble', a.doubleUntil], ['rage', a.rageUntil],
+        ['ghost', a.ghostUntil], ['vamp', a.vampUntil], ['giant', a.giantUntil],
+        ['reflect', a.reflectUntil], ['chain', a.chainUntil],
+      ];
+      for (const [kind, until] of timed) {
+        if (time < until) {
+          const meta = (Game.POWER_META as Record<string, { color: number; icon: string; total: number }>)[kind];
+          powers.push({ label: `${meta.icon} ${t(this.locale, `power.${kind}`)}`, color: meta.color, left: until - time, total: meta.total });
+        }
+      }
       this.ent.syncAvatar(v, a, {
         px: prev.x, py: prev.y, alpha, time,
         isLead: lead?.userId === id,
@@ -351,6 +561,16 @@ export class Game {
     }
     for (const id of [...this.ent.avatars.keys()]) {
       if (!this.sim.avatars.has(id)) this.ent.removeAvatar(id);
+    }
+
+    // shadow clones follow their owners
+    for (const m of this.sim.minions) {
+      const owner = this.sim.getAvatar(m.owner);
+      const v = this.ent.clone(m.id);
+      this.ent.syncClone(v, m, this.picOf(m.owner, owner?.name ?? '?'), this.sim.time);
+    }
+    for (const id of [...this.ent.clones.keys()]) {
+      if (!this.sim.minions.some((m) => m.id === id)) this.ent.removeClone(id);
     }
 
     // bullets + monsters + boss
@@ -389,15 +609,20 @@ export class Game {
       this.stripTimer -= dt;
       if (this.stripTimer <= 0) {
         this.stripTimer = 30;
-        this.hud.showGiftStrip(GIFTS_UI.map((g) => ({
-          icon: g.icon, name: t(this.locale, g.key), value: `◆ ${g.value}+`,
-          color: [0xff9ec4, 0x9fd8ff, 0xffb3c8, 0xffc46b, 0x9fe8ff][GIFTS_UI.indexOf(g)],
+        const strip = this.gifts.enabled().slice(0, 5);
+        const palette = [0xff9ec4, 0x9fd8ff, 0xffb3c8, 0xffc46b, 0x9fe8ff];
+        this.hud.showGiftStrip(strip.map((d, i) => ({
+          icon: d.icon, name: d.name, value: `◆ ${fmtNum(this.locale, d.diamonds)}`,
+          color: palette[i % palette.length],
         })), 6);
       }
     }
     // gold rain visuals
     // ~8 spawns/s * 6 coins keeps the screen readable instead of a coin wall
-    if (time < this.goldRainUntil && Math.random() < dt * 5) this.fx.coinRain(4);
+    // H3: bayrak her karede gerçek duruma eşitlenmeliydi; aksi halde ilk
+    // altın yağmurdan sonra tüm maç boyunca puanlar 2x kalıyordu.
+    this.sim.goldRain = time < this.goldRainUntil;
+    if (this.sim.goldRain && Math.random() < dt * 5) this.fx.coinRain(4);
   }
 
   private titleFor(): string {
@@ -436,7 +661,15 @@ export class Game {
           for (const m of this.sim.monsters) if (m.alive && Math.hypot(m.x - x, m.y - y) < 90) m.hp -= 40;
           const alive = [...this.sim.avatars.values()].filter((a) => a.alive);
           if (alive.length) {
-            for (const a of alive) if (Math.hypot(a.x - x, a.y - y) < 120) a.speedUntil = this.sim.time + 10;
+            for (const a of alive) {
+              if (Math.hypot(a.x - x, a.y - y) < 120) {
+                a.speedUntil = this.sim.time + 10;
+                if (Math.random() < 0.3) {
+                  const pool = Game.POWER_POOL;
+                  this.grantPower(a, pool[(Math.random() * pool.length) | 0], true);
+                }
+              }
+            }
           }
         }
       }
@@ -456,6 +689,11 @@ export class Game {
           }
         }
       }
+
+      // Faz 2.3/3.2: savaş ısısı + son 60 saniye finali
+      this.tornadoStep(dt);
+      this.updateHeat();
+      this.updateFinale();
 
       // idle-stream filler: simulated gifts so the arena never goes quiet
       if (this.autoGifts) {
@@ -521,13 +759,24 @@ export class Game {
   }
 
   private maybeBoss() {
-    const fracs = this.cfg.boss.fractions;
-    for (let i = 0; i < fracs.length; i++) {
-      if (this.bossSpawned[i]) continue;
-      if (this.matchT / this.duration < fracs[i]) continue;
-      this.bossSpawned[i] = true;
-      this.spawnBossNow();
-      break;
+    if (!this.automation.boss) return; // otomasyon kapalı: boss yalnız konsoldan gelir
+    // (a) sabit aralık modu: her bossEverySec saniyede bir boss (0 = kapalı)
+    const every = Math.max(0, this.bossEverySec);
+    if (every > 0) {
+      if (this.matchT >= this.nextBossAt) {
+        this.nextBossAt = this.matchT + every;
+        this.spawnBossNow();
+      }
+    } else {
+      // (b) varsayılan: maçın belirli yüzdelerinde boss
+      const fracs = this.cfg.boss.fractions;
+      for (let i = 0; i < fracs.length; i++) {
+        if (this.bossSpawned[i]) continue;
+        if (this.matchT / this.duration < fracs[i]) continue;
+        this.bossSpawned[i] = true;
+        this.spawnBossNow();
+        break;
+      }
     }
     // track hunter (top damage to boss)
     if (this.sim.boss?.alive) {
@@ -535,6 +784,12 @@ export class Game {
       for (const a of this.sim.avatars.values()) if (a.bossDamage > top) { top = a.bossDamage; this.hunterName = a.name; }
     }
   }
+
+  /** Faz 3.4 — sahne otomasyonu: konsoldan açılıp kapanabilir. */
+  automation = { boss: true, goldRain: true, night: true };
+  /** 0 = maç yüzdeleriyle boss; >0 = bu kadar saniyede bir boss */
+  bossEverySec = 0;
+  private nextBossAt = 0;
 
   private spawnBossNow() {
     if (this.sim.boss?.alive) return;
@@ -570,7 +825,17 @@ export class Game {
     audio.say(this.locale, key, main);
   }
 
-  private onKill(killerId: string, victimId: string, streak: number, cut: number, dmg?: number) {
+  private onKill(killerId: string, victimId: string, streak: number, cut: number, dmg?: number, chain?: { x: number; y: number }[]) {
+    const kk = this.sim.getAvatar(killerId);
+    if (kk && chain?.length) {
+      let px = kk.x, py = kk.y;
+      for (const p of chain) {
+        this.fx.arc(px, py, p.x, p.y, 0x6bb8ff);
+        px = p.x; py = p.y;
+      }
+      this.fx.shake.add(7);
+      audio.thunder();
+    }
     const k = this.sim.getAvatar(killerId);
     const v = this.sim.getAvatar(victimId);
     audio.kill();
@@ -588,6 +853,8 @@ export class Game {
         0xff9f1c, 40,
       );
       this.fx.star(k.x, k.y, 0xffd23f, 8);
+      this.grantPower(k, 'reflect', true);
+      this.fx.floatText(k.x, k.y - 70, `🪞 ${t(this.locale, 'power.reflect')}`, 0x9fd8ff, 28);
     }
     if ([5, 15, 30, 50].includes(streak)) {
       const key = `streak.${streak}`;
@@ -634,6 +901,32 @@ export class Game {
   /** Discrete sim events -> on-screen feedback. */
   private onSimEvent(e: { type: string; [k: string]: unknown }) {
     const tr = this.secondLocale;
+    if (e.type === 'hit') { this.onHitEvent(e as unknown as HitEvent); return; }
+    if (e.type === 'power') {
+      const kind = String(e.kind);
+      const meta = Game.POWER_META[kind];
+      const a = this.sim.getAvatar(String(e.userId));
+      if (a && meta) {
+        // her güç kendi rengiyle parlar (Faz 2.5 görsel kimlik)
+        this.fx.spawnRing(a.x, a.y, meta.color, 96);
+        this.fx.burst(a.x, a.y, meta.color, 10, 200, 0.5, 22);
+        // etiket dile baglanir: POWER_META.label Turkce oldugu icin
+        // Ispanyolca yayinda Turkce metin siziyordu
+        this.fx.floatText(a.x, a.y - 46, `${meta.icon} ${t(this.locale, `power.${kind}`)}`, meta.color, 26, 70);
+      }
+      return;
+    }
+    if (e.type === 'orbHit') {
+      // yörünge yıldızı değdiği an: kıvılcım + ışık halkası
+      const o = this.sim.getAvatar(String(e.owner));
+      const hot = o ? this.sim.time < o.rageUntil : false;
+      const x = Number(e.x), y = Number(e.y);
+      this.fx.burst(x, y, hot ? 0xff7a5a : 0xffe6a0, 5, 190, 0.32, 16);
+      this.fx.spawnRing(x, y, hot ? 0xffb0a0 : 0xfff0b0, 26);
+      return;
+    }
+    if (e.type === 'bossPhase') { this.onBossPhase(Number(e.phase) || 2); return; }
+    if (e.type === 'streakTier') return; // istemci zaten onKill'da işliyor
     if (e.type === 'castleDown') {
       this.fx.shockwave(540, 1004, 0xff5b5b, 620, 1.1);
       this.fx.shake.add(26);
@@ -670,6 +963,43 @@ export class Game {
     }
   }
 
+  /** Vuruş geri bildirimi (Faz 1.3): kıvılcım + hasar sayısı + ses + mikro sarsıntı. */
+  private hitBudget = 0;
+  private onHitEvent(e: HitEvent) {
+    // köprü/spam koruması: kare başına en fazla 8 kıvılcım
+    if (this.hitBudget <= 0) return;
+    this.hitBudget--;
+    this.stats.hits++;
+    const x = Number(e.x) || 0, y = Number(e.y) || 0;
+    const victim = this.sim.getAvatar(e.victim);
+    if (victim) this.ent.avatar(victim.userId).flashAmt = 1;
+    const col = e.reflect ? 0x9fd8ff : e.victim === 'boss' ? 0xffb03a : e.crit ? 0xff7a3a : 0xfff3c4;
+    this.fx.hitSpark(x, y, col, e.crit ? 10 : 5);
+    if (e.crit) { this.fx.dmgNum(x, y, Number(e.dmg) || 0, true); this.fx.punchZoom(1.05); }
+    else if (Number(e.dmg) >= 8) this.fx.dmgNum(x, y, Number(e.dmg) || 0, false);
+    this.fx.shake.add(e.crit ? 6 : 1.6);
+    audio.hit();
+  }
+
+  /** Boss faz geçişi (Faz 2.4): can barı kırılır, ekran sarsılır, müzik sertleşir. */
+  private onBossPhase(phase: number) {
+    const b = this.sim.boss;
+    if (!b) return;
+    this.bossPhase = phase;
+    this.fx.shockwave(b.x, b.y, phase === 3 ? 0xff3b5c : 0xffa03a, 320, 0.7);
+    this.fx.shake.add(14 + phase * 6);
+    this.fx.flash(0.18);
+    this.fx.hitStop(120);
+    this.hud.announce(
+      `${upper(this.locale, t(this.locale, 'boss.phase'))} ${phase}/3`,
+      this.dual ? upper(this.secondLocale, t(this.secondLocale, 'boss.phase')) : undefined,
+      phase === 3 ? 0xff5b5b : 0xffb03a, 52,
+    );
+    audio.roar();
+    audio.intense = true;
+    audio.syncMusicLayers();
+  }
+
   /* ---------------- live input ---------------- */
   /** Bounded dedupe so a reconnecting bridge cannot replay old events. */
   private seenEvents = new Set<string>();
@@ -684,7 +1014,9 @@ export class Game {
     return true;
   }
 
-  ingest(e: LiveEvent) {
+  ingest(raw: LiveEvent) {
+    const e = sanitizeEvent(raw);
+    if (!e) return;
     if (!this.ingestDedupe(e)) return;
     audio.ensure();
     if (e.type === 'join') {
@@ -725,8 +1057,30 @@ export class Game {
           this.fx.shockwave(a.x, a.y, 0xffd23f, 150, 0.4);
           audio.shot();
         }
+      } else if (cmd === 'power') {
+        if ((this.cdPower.get(e.userId) ?? -999) + 30 < this.sim.time) {
+          this.cdPower.set(e.userId, this.sim.time);
+          const pool = Game.POWER_POOL;
+          this.grantPower(a, pool[(Math.random() * pool.length) | 0]);
+        }
       } else if (cmd === 'respond') {
         if (this.sim.mercyRespond(e.userId)) this.mercySaved(e.name);
+      } else if (cmd === 'team') {
+        // H5: bekleme süresi yoktu; seyirci chat spam'leyerek sınırsız kalkan
+        // + hasar alabiliyordu. Diğer komutlarla aynı koruma.
+        if ((this.cdTeam.get(e.userId) ?? -999) + TEAM_COOLDOWN_SEC >= this.sim.time) {
+          this.hud.pushFeed(`⚔ ${truncateNick(e.name, 10)}: bekleniyor…`, 0x9fe3ff);
+        } else {
+          this.cdTeam.set(e.userId, this.sim.time);
+          this.applyTeamChoice(a, normalizeTeam(e.text ?? ''));
+        }
+      } else if (cmd === 'help') {
+        this.hud.announce(
+          t(this.locale, 'cmd.help'),
+          this.dual ? t(this.secondLocale, 'cmd.help') : undefined,
+          0x9fe3ff, 40,
+        );
+        this.hud.pushFeed(`💬 ${truncateNick(e.name, 12)}: ${t(this.locale, 'cmd.help')}`, 0x9fe3ff);
       } else if ((e.text ?? '').toLowerCase().includes('deleteme')) {
         this.removeViewer(e.userId);
       }
@@ -737,6 +1091,83 @@ export class Game {
       this.ensureAvatar(e.userId, e.name, e.pic);
     }
   }
+
+  /**
+   * Faz 3.5 — takım seçimi: seyirci kırmızıya maviyi, maviye kırmızıyı vurur.
+   * Ritim hissi verir: kalabalık iki tarafa dağılır, seyirci etkileşir.
+   */
+  teamScore: Record<'rojo' | 'azul', number> = { rojo: 0, azul: 0 };
+  private applyTeamChoice(a: AvatarState, team: Team) {
+    const T = this.sim.time;
+    if (team) {
+      this.teamScore[team] += 1;
+      this.stats.teamPicks++;
+      // dostuna kalkan, düşmana hasar
+      a.shieldUntil = Math.max(a.shieldUntil, T + 5);
+      const color = team === 'rojo' ? 0xff5b5b : 0x3fb6ff;
+      this.fx.spawnRing(a.x, a.y, color, 70);
+      this.fx.floatText(a.x, a.y - 70, team === 'rojo' ? '🔴' : '🔵', color, 38);
+      audio.ui();
+      // rakip taraftaki en yakın düşmana küçük hasar
+      let best: AvatarState | null = null;
+      let bd = 260;
+      for (const o of this.sim.avatars.values()) {
+        if (!o.alive || o.userId === a.userId) continue;
+        const d = Math.hypot(o.x - a.x, o.y - a.y);
+        if (d < bd) { bd = d; best = o; }
+      }
+      if (best) {
+        this.sim.dealDamage(a.userId, best.userId, 15);
+        this.ent.avatar(best.userId).flashAmt = 1;
+        this.fx.hitSpark(best.x, best.y, color, 6);
+      }
+      this.hud.pushFeed(
+        `⚔️ ${truncateNick(a.name, 10)} → ${team === 'rojo' ? '🔴 ROJO' : '🔵 AZUL'} (${this.teamScore.rojo}-${this.teamScore.azul})`,
+        color,
+      );
+      // takım dengesi büyükse arena tonu
+      if (this.teamScore.rojo + this.teamScore.azul > 0 && (this.teamScore.rojo + this.teamScore.azul) % 10 === 0) {
+        this.sayAnnounce('team',
+          `🔴 ${this.teamScore.rojo} — ${this.teamScore.azul} 🔵`,
+          undefined, 0xffd23f, 50);
+      }
+      return;
+    }
+    // renk verilmedi: oyuncunun rengi ne ise rastgele bir hedef seç
+    this.applyTeamChoice(a, Math.random() < 0.5 ? 'rojo' : 'azul');
+  }
+
+  /**
+   * Faz 3.3 — köprü durumu. Maç KESİNİYLE devam eder; yalnızca ekranda
+   * kısa bir uyarı görünür ve konsol kırmızıya döner. Geri gelince
+   * telemetri notu düşülür, oyuncular yerinde kalır.
+   */
+  private bridgeOk = true;
+  private bridgeSince = 0;
+  bridgeStatus(ok: boolean) {
+    const tr = this.secondLocale;
+    this.bridgeSince = performance.now();
+    if (ok === this.bridgeOk) return;
+    this.bridgeOk = ok;
+    this.stats.bridgeDrops += ok ? 0 : 1;
+    if (ok) {
+      this.hud.announce(
+        upper(this.locale, t(this.locale, 'bridge.back')),
+        this.dual ? upper(tr, t(tr, 'bridge.back')) : undefined,
+        0x2fe08a, 44,
+      );
+      audio.ui();
+    } else {
+      this.hud.announce(
+        upper(this.locale, t(this.locale, 'bridge.down')),
+        this.dual ? upper(tr, t(tr, 'bridge.down')) : undefined,
+        0xffa03a, 44,
+      );
+      this.hud.pushFeed(`⚠ ${t(this.locale, 'bridge.down')}`, 0xffa03a);
+      audio.ui();
+    }
+  }
+  get bridgeConnected() { return this.bridgeOk; }
 
   removeViewer(userId: string) {
     this.sim.avatars.delete(userId);
@@ -751,8 +1182,17 @@ export class Game {
       if (this.sim.avatars.size >= this.cfg.match.maxFighters) {
         let worstId: string | null = null, oldest = Infinity;
         for (const [id, v] of this.sim.avatars) if (v.lastActive < oldest) { oldest = v.lastActive; worstId = id; }
-        if (worstId && this.sim.time - oldest > 20) this.removeViewer(worstId);
-        else return this.sim.getAvatar([...this.sim.avatars.keys()][0])!;
+        // H4: 60 kişi doluyken YENİ izleyicinin hediyesi haritada ilk sıradaki
+        // (ölü olabilecek) RASTGELE bir oyuncuya yazılıyordu. Şimdi en eski
+        // izleyici yerine geçilir; o da çok yeniyse izleyici izleyici kalır.
+        if (worstId) this.removeViewer(worstId);
+        else {
+          // Sadece taze oyuncular varsa arena dolu demektir: yeni gelen oyuncu
+          // sadece seyirci olur, kimsenin bedenine hediye/isabet yazılmaz.
+          const spectator = this.sim.makeAvatar(userId, name, pic);
+          spectator.alive = false; spectator.hp = 0;
+          return spectator;
+        }
       }
       a = this.sim.makeAvatar(userId, name, pic);
       this.sim.addAvatar(a);
@@ -780,7 +1220,12 @@ export class Game {
   }
 
   applyGift(e: LiveEvent) {
-    const tier = giftTier(e.diamonds ?? 1);
+    const def = this.gifts.lookup(e.giftName);
+    const tier = giftTier(e.diamonds ?? def?.diamonds ?? 1);
+    if (def && !def.enabled) {
+      this.hud.pushFeed(`🚫 ${truncateNick(e.name, 12)} ${def.icon} ${def.name}`, 0x8fa0c8);
+      return; // konsoldan kapatılmış hediye oyuna karışmaz
+    }
     this.stats.gifts[tier - 1]++;
     this.lastEventUser = { id: e.userId, name: e.name };
     const g = this.gifters.find((x) => x.userId === e.userId);
@@ -797,8 +1242,11 @@ export class Game {
     if (this.goal >= this.goalTarget) {
       this.goal = 0;
       this.goalTarget = Math.round(this.goalTarget * this.cfg.gifts.goalGrowth);
-      this.goldRainUntil = this.sim.time + this.cfg.gifts.goldRainSec;
-      this.sim.goldRain = true;
+      // Faz 3.4: altın yağmur otomasyonu kapalıysa yine sürer, sadece görsel/duyuru olmaz
+      if (this.automation.goldRain) {
+        this.goldRainUntil = this.sim.time + this.cfg.gifts.goldRainSec;
+        this.sim.goldRain = true;
+      }
       const tr = this.secondLocale;
       this.sayAnnounce('goldrain',
         upper(this.locale, t(this.locale, 'goldrain')),
@@ -824,12 +1272,9 @@ export class Game {
       this.hud.pushFeed(`🎁 ${truncateNick(e.name, 12)} ${e.giftName ?? ''} (${t(this.locale, 'queued', { s: '' }).trim() || 'en cola'})`, 0x9fe3ff);
       return;
     }
-    const T = this.sim.time;
-    if (tier === 1) { a.hp = Math.min(a.maxHp, a.hp + 30); a.streak += 1; }
-    if (tier === 2) { a.streak += 5; a.speedUntil = T + 10; this.randomPower(a); }
-    if (tier === 3) { a.shieldUntil = T + 8; a.doubleUntil = T + 3; this.randomPower(a); }
-    if (tier === 4) this.meteorFx(e, a);
-    if (tier === 5) this.tornadoFx(e, a);
+    // kayıtlı eylem varsa kademe yerine o çalışır (hediye -> komut eşleme)
+    if (def && def.action !== 'tier') this.applyGiftAction(a, e, def.action);
+    else this.applyTierEffect(a, e, tier);
     if (arr.length >= 2) {
       const tr = this.secondLocale;
       this.hud.announce(
@@ -843,7 +1288,74 @@ export class Game {
     this.fx.spawnRing(a.x, a.y, 0xffd23f, 50 + tier * 18);
     this.fx.shake.add(3 + tier * 3);
     this.hud.pushFeed(`🎁 ${truncateNick(e.name, 12)} ×${fmtNum(this.locale, e.diamonds ?? 0)}💎 ${e.giftName ?? ''}${cm > 1 ? ` ×${cm}` : ''}`, tier >= 4 ? 0xffd23f : 0xffffff);
-    if (tier >= 4) this.hud.heroCard(e.name, e.userId, `${t(this.locale, `gift.t${tier}`)} ◆${fmtNum(this.locale, e.diamonds ?? 0)}`, tier === 5 ? 0x2b9bd9 : 0xff7b00);
+    // Faz 1.4: HER hediye büyük kahraman kartı + isim şeridi (T4+ daha da büyük)
+    const color = tier === 5 ? 0x2b9bd9 : tier === 4 ? 0xff7b00 : tier === 3 ? 0xc084fc : tier === 2 ? 0x2fb85a : 0x3fb6d8;
+    // kademe hediyesinde etiket zaten başlıkta var; sadece özel eylemlerde göster
+    const effect = def && def.action !== 'tier' ? (Game.ACTION_LABEL[def.action] ?? def.action) : '';
+    this.hud.heroCard(
+      e.name, e.userId,
+      `${t(this.locale, `gift.t${tier}`)} ◆${fmtNum(this.locale, e.diamonds ?? 0)}${cm > 1 ? ` ×${cm}` : ''}`,
+      color, def?.icon ?? '🎁', effect,
+    );
+    if (tier >= 4) {
+      this.fx.confettiBurst(a.x, a.y, tier === 5 ? 70 : 40);
+      this.fx.punchZoom(1.04);
+    }
+  }
+
+  /** Kademe varsayılan etkisi (T1-T5). */
+  private applyTierEffect(a: AvatarState, e: LiveEvent, tier: number) {
+    const T = this.sim.time;
+    if (tier === 1) { a.hp = Math.min(a.maxHp, a.hp + 30); a.streak += 1; }
+    if (tier === 2) { a.streak += 5; a.speedUntil = T + 10; this.randomPower(a); }
+    if (tier === 3) {
+      a.shieldUntil = T + 8; a.doubleUntil = T + 3;
+      this.randomPower(a);
+      if (Math.random() < 0.5) this.grantPower(a, 'frost');
+    }
+    if (tier === 4) { this.meteorFx(e, a); this.grantPower(a, 'rage', true); }
+    if (tier === 5) { this.tornadoFx(e, a); this.grantPower(a, 'ghost', true); this.sim.spawnClone(e.userId); }
+  }
+
+  /** Kayıtlı hediye eylemi: hediye -> komut/güç eşlemesi buradan çalışır. */
+  private applyGiftAction(a: AvatarState, e: LiveEvent, action: GiftAction) {
+    const T = this.sim.time;
+    switch (action) {
+      case 'tier': this.applyTierEffect(a, e, giftTier(e.diamonds ?? 1)); break;
+      case 'shield':
+        a.shieldUntil = T + 10;
+        this.fx.spawnRing(a.x, a.y, 0x39d0ff, 60);
+        this.fx.floatText(a.x, a.y - 70, '🛡', 0x39d0ff, 40);
+        audio.ui();
+        break;
+      case 'fire':
+        this.sim.fireRing(e.userId);
+        this.fx.shockwave(a.x, a.y, 0xffd23f, 150, 0.4);
+        audio.shot();
+        break;
+      case 'power': this.randomPower(a); break;
+      case 'heal':
+        a.hp = Math.min(a.maxHp, a.hp + 50);
+        this.fx.floatText(a.x, a.y - 70, '✚50', 0x2fb85a, 36);
+        this.fx.burst(a.x, a.y, 0x2fb85a, 12, 200, 0.6, 20, 0, -60);
+        break;
+      case 'speed':
+        a.speedUntil = T + 10;
+        this.fx.floatText(a.x, a.y - 70, '⚡', 0x39d0ff, 38);
+        break;
+      case 'meteor': this.meteorFx(e, a); break;
+      case 'tornado': this.tornadoFx(e, a); break;
+      case 'streak5':
+        a.streak += 5; a.bestStreak = Math.max(a.bestStreak, a.streak);
+        this.fx.floatText(a.x, a.y - 70, '+5', 0xc084fc, 36);
+        break;
+      case 'ignore': break; // sayaçlar işler, bedene dokunulmaz
+      default:
+        // rage | ghost | vamp | giant | reflect | chain | frost | clone
+        if (action === 'clone') this.sim.spawnClone(e.userId);
+        else this.grantPower(a, action);
+        break;
+    }
   }
 
   private meteorFx(e: LiveEvent, a: AvatarState) {
@@ -862,28 +1374,108 @@ export class Game {
       const v = this.sim.getAvatar(id);
       return v ? { x: v.x, y: v.y } : null;
     });
-    const start = performance.now();
-    const ticks = setInterval(() => {
-      const src = this.sim.getAvatar(e.userId);
-      if (!src?.alive || performance.now() - start > 5000) { clearInterval(ticks); return; }
+    // H6: 300ms'de bir setInterval 5 saniye boyunca ~17 tik atıyordu (dokümana
+    // göre 3). Hem denge bozuktu hem de sim durumunu sabit adımın dışından
+    // değiştiriyordu. Artık tam olarak TORNADO_TICKS darbe, sabit adımda.
+    this.tornadoTicks.set(e.userId, { left: TORNADO_TICKS, cd: 0, hitAt: new Map() });
+  }
+
+  /** Hortum darbeleri — sabit adımda çalışır (deterministik). */
+  private tornadoStep(dt: number) {
+    if (!this.tornadoTicks.size) return;
+    for (const [id, t] of this.tornadoTicks) {
+      const src = this.sim.getAvatar(id);
+      if (!src?.alive || t.left <= 0) { this.tornadoTicks.delete(id); continue; }
+      t.cd -= dt;
+      if (t.cd > 0) continue;
+      t.cd = TORNADO_TICK_SEC;
+      t.left--;
       for (const o of this.sim.avatars.values()) {
-        if (o.userId === e.userId || !o.alive) continue;
-        if (Math.hypot(o.x - src.x, o.y - src.y) < 75) {
-          this.sim.dealDamage(e.userId, o.userId, 15);
-          this.ent.avatar(o.userId).flashAmt = 1;
-        }
+        if (o.userId === id || !o.alive) continue;
+        // aynı kişiye art arda iki darbe gitmesin
+        if ((t.hitAt.get(o.userId) ?? -99) > this.sim.time - 1.2) continue;
+        if (Math.hypot(o.x - src.x, o.y - src.y) > TORNADO_RADIUS) continue;
+        t.hitAt.set(o.userId, this.sim.time);
+        this.sim.dealDamage(id, o.userId, TORNADO_DMG);
+        this.ent.avatar(o.userId).flashAmt = 1;
+        this.fx.hitSpark(o.x, o.y, 0x9fe8ff, 5);
       }
-    }, 300);
+    }
+  }
+
+  /** Hediye eylemi -> kartta görünen kısa etiket (Faz 1.4). */
+  static readonly ACTION_LABEL: Record<string, string> = {
+    tier: '', ignore: '', power: 'PODER', shield: 'KALKAN', fire: 'FUEGO',
+    meteor: 'METEORO', tornado: 'TORNADO', heal: 'VIDA', speed: 'VELOCIDAD',
+    streak5: 'RACHA +5', rage: 'ÖFKE', ghost: 'HAYALET', vamp: 'VAMPİR',
+    giant: 'DEV', reflect: 'YANSITMA', chain: 'ZİNCİR', frost: 'DONMA', clone: 'KLON',
+  };
+  /** Güç vitrini: renk + ikon + süre + parçacık stili. */
+  static readonly POWER_META: Record<string, { color: number; icon: string; label: string; total: number; fx: string }> = {
+    fuerza: { color: 0xd9382b, icon: '💪', label: 'FUERZA', total: 15, fx: 'crack' },
+    velocidad: { color: 0x2b9bd9, icon: '⚡', label: 'VELOCIDAD', total: 15, fx: 'streak' },
+    veneno: { color: 0x51d651, icon: '☠', label: 'VENENO', total: 15, fx: 'drip' },
+    curacion: { color: 0x2fb85a, icon: '✚', label: 'CURACIÓN', total: 15, fx: 'rise' },
+    doble: { color: 0xd99a1b, icon: '✌', label: 'DOBLE', total: 15, fx: 'star' },
+    rage: { color: 0xff5a1e, icon: '🔥', label: 'ÖFKE', total: 8, fx: 'flame' },
+    ghost: { color: 0xbfefff, icon: '👻', label: 'HAYALET', total: 4, fx: 'wisp' },
+    vamp: { color: 0xc44dff, icon: '🧛', label: 'VAMPİR', total: 10, fx: 'drip' },
+    giant: { color: 0xffd23f, icon: '🦣', label: 'DEV', total: 8, fx: 'shock' },
+    reflect: { color: 0x9fd8ff, icon: '🪞', label: 'YANSITMA', total: 6, fx: 'shard' },
+    chain: { color: 0x6bb8ff, icon: '⚡', label: 'ZİNCİR', total: 10, fx: 'bolt' },
+    frost: { color: 0xa8e8ff, icon: '❄', label: 'DONMA', total: 3, fx: 'crystal' },
+    shield: { color: 0x39d0ff, icon: '🛡', label: 'KALKAN', total: 10, fx: 'shield' },
+  };
+  /** T2+ rastgele havuz (imza efektler hariç hepsi). */
+  static readonly POWER_POOL = ['fuerza', 'velocidad', 'veneno', 'curacion', 'doble',
+    'rage', 'ghost', 'vamp', 'giant', 'reflect', 'chain', 'frost'] as const;
+
+  /**
+   * Merkezi güç dağıtımı: sim süresini kurar, görseli + sesi + yazıyı basar.
+   * Hediyeler, seri kesme, boss, şimşek, !güç komutu — hepsi buradan geçer.
+   */
+  grantPower(a: AvatarState, kind: string, quiet = false): boolean {
+    if (!a?.alive) return false;
+    if (kind === 'clone') {
+      if (!this.sim.spawnClone(a.userId)) return false;
+      const meta = { color: 0xb9a7ff, icon: '👥' };
+      if (!quiet) {
+        this.fx.spawnRing(a.x, a.y, meta.color, 70);
+        this.fx.burst(a.x, a.y, meta.color, 16, 240, 0.6, 20, 0, 120);
+        this.fx.floatText(a.x, a.y - 70, `${meta.icon} ${truncateNick(a.name, 10)}`, meta.color, 30);
+        audio.gift(2);
+      }
+      a.lastActive = this.sim.time;
+      return true;
+    }
+    if (!this.sim.grant(a.userId, kind)) return false;
+    const meta = (Game.POWER_META as Record<string, { color: number; icon: string; total: number }>)[kind];
+    if (!meta) return true;
+    if (!quiet) {
+      this.fx.spawnRing(a.x, a.y, meta.color, 60);
+      this.fx.burst(a.x, a.y, meta.color, 14, 260, 0.6, 20, 0, 160);
+      const label = t(this.locale, `power.${kind}`);
+      this.fx.floatText(a.x, a.y - 70, `${meta.icon} ${label}`, meta.color, 30);
+      if (kind === 'frost') {
+        this.fx.burst(a.x, a.y, 0xbfefff, 26, 340, 0.8, 24, 0, 60);
+        this.fx.shake.add(8);
+        audio.thunder();
+      } else if (kind === 'giant') {
+        this.fx.shockwave(a.x, a.y, meta.color, 240, 0.6);
+        this.fx.shake.add(10);
+        audio.roar();
+      } else if (kind === 'ghost') {
+        audio.ui();
+      } else {
+        audio.gift(2);
+      }
+    }
+    return true;
   }
 
   private randomPower(a: AvatarState) {
-    const T = this.sim.time;
-    const r = Math.random();
-    if (r < 0.2) a.fuerzaUntil = T + 15;
-    else if (r < 0.4) a.speedUntil = T + 15;
-    else if (r < 0.6) a.doubleUntil = T + 15;
-    else if (r < 0.8) a.shieldUntil = T + 10;
-    else a.healUntil = T + 15;
+    const pool = Game.POWER_POOL;
+    this.grantPower(a, pool[(Math.random() * pool.length) | 0]);
   }
 
   flushPending(userId: string) {
@@ -895,11 +1487,15 @@ export class Game {
   private applyGiftCore(e: LiveEvent) {
     const a = this.sim.getAvatar(e.userId);
     if (!a || !a.alive) return;
-    const tier = giftTier(e.diamonds ?? 1);
-    const T = this.sim.time;
+    const def = this.gifts.lookup(e.giftName);
+    if (def && !def.enabled) return;
+    const tier = giftTier(e.diamonds ?? def?.diamonds ?? 1);
+    if (def && def.action !== 'tier') { this.applyGiftAction(a, e, def.action); return; }
     if (tier === 1) { a.hp = Math.min(a.maxHp, a.hp + 30); a.streak += 1; }
-    if (tier === 2) { a.streak += 5; a.speedUntil = T + 10; this.randomPower(a); }
-    if (tier >= 3) a.doubleUntil = T + 3;
+    if (tier === 2) { a.streak += 5; this.grantPower(a, 'velocidad', true); this.randomPower(a); }
+    if (tier === 3) { this.grantPower(a, 'shield', true); this.grantPower(a, 'doble', true); this.randomPower(a); }
+    if (tier === 4) this.grantPower(a, 'rage', true);
+    if (tier === 5) { this.grantPower(a, 'ghost', true); this.sim.spawnClone(e.userId); }
     this.fx.burst(a.x, a.y, 0xffd23f, 14, 280, 0.6, 22, 0, 180);
   }
 
@@ -921,7 +1517,7 @@ export class Game {
 
   forcePhase(p: 'intro' | 'play' | 'end' | 'table' | 'awards' | 'podium') {
     if (p === 'play') { this.phase = 'play'; this.hud.clearScene(); this.hud.setArenaHudVisible(true); return; }
-    if (p === 'end') { this.phase = 'end'; this.phaseT = this.cfg.match.endCountdownSec; this.hud.setArenaHudVisible(false); this.hud.hideAnnouncements(); this.hud.hideGiftStrip(); this.computeResults(); this.hud.sceneEnd(this.phaseT, this.locale); return; }
+    if (p === 'end') { this.phase = 'end'; this.phaseT = this.cfg.match.endCountdownSec; this.hud.setArenaHudVisible(false); this.hud.hideAnnouncements(); this.hud.hideGiftStrip(); this.computeResults(); this.endSceneShown = true; this.hud.sceneEnd(this.phaseT, this.locale); return; }
     if (p === 'table') { this.computeResults(); this.phase = 'end'; this.phaseT = 0.02; return; }
     if (p === 'awards') { this.computeResults(); this.phase = 'table'; this.phaseT = 0.02; return; }
     if (p === 'podium') { this.computeResults(); this.phase = 'awards'; this.phaseT = 0.02; return; }
@@ -949,10 +1545,25 @@ export class Game {
   /** Inject a gift as if a viewer sent it. */
   injectGift(tier: 1 | 2 | 3 | 4 | 5, userId?: string) {
     const id = userId ?? `mock${this.mockSeq % 400}`;
+    const pool = this.gifts.enabled().filter((d) => giftTier(d.diamonds) === tier);
+    const pick = pool.length ? pool[(Math.random() * pool.length) | 0] : null;
     this.ingest({
       type: 'gift', id: `cons-${this.mockSeq++}`, userId: id,
       name: this.sim.getAvatar(id)?.name ?? this.mockName(), pic: null,
-      giftName: `Gift T${tier}`, diamonds: [1, 8, 99, 299, 1500][tier - 1], n: 1, repeatEnd: true,
+      giftName: pick?.name ?? `Gift T${tier}`,
+      diamonds: pick?.diamonds ?? [1, 8, 99, 299, 1500][tier - 1],
+      n: 1, repeatEnd: true,
+    });
+  }
+  /** Kayıtlı hediyeyi ismiyle enjekte et (konsol test düğmeleri için). */
+  injectGiftById(giftId: string, userId?: string) {
+    const def = this.gifts.lookup(giftId);
+    if (!def) return;
+    const id = userId ?? `mock${this.mockSeq % 400}`;
+    this.ingest({
+      type: 'gift', id: `cons-${this.mockSeq++}`, userId: id,
+      name: this.sim.getAvatar(id)?.name ?? this.mockName(), pic: null,
+      giftName: def.name, diamonds: def.diamonds, n: 1, repeatEnd: true,
     });
   }
   /** Send a chat line as if a viewer typed it (runs command normalization). */

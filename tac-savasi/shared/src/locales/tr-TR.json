@@ -77,5 +77,21 @@
   "monsters": "canavar",
   "boss.trap": "YAKALANDI!",
   "points": "puan",
-  "score": "PUAN"
+  "score": "PUAN",
+  "power.rage": "ÖFKE",
+  "power.ghost": "HAYALET",
+  "power.vamp": "VAMPİR",
+  "power.giant": "DEV",
+  "power.reflect": "YANSITMA",
+  "power.chain": "ZİNCİR",
+  "power.frost": "DONDURMA",
+  "boss.phase": "ÖFKENİN ZİRVESİ!",
+  "final.last60": "SON DAKİKA!",
+  "final.sprint": "HER ŞEY BU!",
+  "cmd.help": "YAZ: !güç, !kalkan, !fuego, !takim",
+  "gifted": "HEDİYE!",
+  "power.granted": "{power}!",
+  "match.last10": "SON 10!",
+  "bridge.down": "SİNYAL YOK - OYUN DEVAM EDİYOR",
+  "bridge.back": "YENİDEN BAĞLANDI!"
 }
