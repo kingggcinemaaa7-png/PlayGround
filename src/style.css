@@ -1,0 +1,30 @@
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#05060d;color:#fff;font-family:Inter,system-ui,sans-serif;overflow:hidden}
+#app{position:fixed;inset:0}#stage{position:absolute;inset:0;width:100%;height:100%;display:block}
+#safeArea{position:absolute;inset:0;pointer-events:none;border:0}
+body.vert #safeArea{box-shadow:inset 0 0 0 2px rgba(0,255,255,.25)}
+body.vert #stage{object-fit:cover}
+#hud{position:absolute;top:10px;left:10px;display:flex;gap:8px;z-index:5}
+#hud div{background:rgba(0,0,0,.55);border:1px solid rgba(0,255,255,.3);border-radius:10px;padding:6px 10px;text-align:center;min-width:64px}
+#hud b{font-size:18px;display:block;color:#0ff}#hud span{font-size:10px;opacity:.7;letter-spacing:1px}
+#sectionTitle{position:absolute;top:12px;width:100%;text-align:center;z-index:4;pointer-events:none}
+#sectionTitle h1{margin:0;font-size:clamp(22px,4vw,44px);letter-spacing:6px;text-shadow:0 0 24px #f0f,0 0 8px #0ff}
+#sectionTitle span{font-size:11px;letter-spacing:4px;background:#f0f;padding:2px 10px;border-radius:20px}
+#giftBanner{position:absolute;top:22%;width:100%;text-align:center;z-index:6;transition:all .4s}
+#giftBanner span{display:block;font-size:clamp(28px,6vw,64px);font-weight:900;color:#ffe45e;text-shadow:0 0 30px #f80}
+#giftBanner small{font-size:16px;background:rgba(0,0,0,.6);padding:4px 14px;border-radius:20px;border:1px solid #ffe45e}
+.hidden{opacity:0;transform:scale(.9)}
+#panel{position:absolute;right:10px;bottom:10px;width:250px;background:rgba(8,10,24,.88);border:1px solid rgba(0,255,255,.35);border-radius:12px;z-index:10;font-size:13px;backdrop-filter:blur(8px)}
+#panel header{display:flex;justify-content:space-between;padding:8px 10px;font-weight:700;background:rgba(0,255,255,.1);border-radius:12px 12px 0 0}
+#panelBody{padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.row label{opacity:.75}select,input{flex:1;background:#111;color:#fff;border:1px solid #333;border-radius:6px;padding:4px}
+.btns{flex-wrap:wrap}.btns button{flex:1;background:#1a1440;border:1px solid #f0f;color:#fff;border-radius:8px;padding:6px;cursor:pointer;white-space:nowrap}
+.btns button:hover{background:#f0f}#connDot{width:10px;height:10px;border-radius:50%;background:#0f0;display:inline-block}.status{gap:6px;justify-content:flex-start}
+.row.sep{font-size:10px;letter-spacing:2px;opacity:.6;border-top:1px solid rgba(0,255,255,.2);padding-top:6px;justify-content:flex-start}
+#roster button{font-size:16px;flex:1}
+#startGate{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:rgba(0,0,0,.72);z-index:20}
+#startGate button{font-size:20px;padding:14px 26px;border-radius:14px;border:0;background:linear-gradient(90deg,#f0f,#0ff);color:#000;font-weight:900;cursor:pointer}
+#toast{position:absolute;left:10px;bottom:10px;z-index:11;display:flex;flex-direction:column;gap:6px}
+.toast{background:rgba(0,0,0,.75);border-left:3px solid #0ff;padding:6px 10px;border-radius:6px;font-size:13px}
+body.dual #app::after{content:"9:16 GÜVENLİ ALAN";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(56.25vh,100%);height:100%;border:1px dashed rgba(255,255,255,.35);pointer-events:none;font-size:10px;letter-spacing:2px;text-align:center;color:rgba(255,255,255,.5)}
+@media(max-width:640px){#panel{width:200px;font-size:12px}#hud div{min-width:52px}}

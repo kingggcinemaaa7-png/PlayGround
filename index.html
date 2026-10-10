@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>NEON PULSE — Pro TikTok Konser v7</title>
+<link rel="stylesheet" href="/src/style.css"/>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+  <div id="safeArea"></div>
+  <div id="giftBanner" class="hidden"><span id="giftUser">—</span><small id="giftName">—</small></div>
+  <div id="sectionTitle"><span id="sectionKicker">LIVE</span><h1 id="sectionBig">NEON PULSE</h1></div>
+  <div id="hud">
+    <div><b id="fps">60</b><span>FPS</span></div>
+    <div><b id="bpmV">126</b><span>BPM</span></div>
+    <div><b id="viewers">1.2K</b><span>İZLEYİCİ</span></div>
+    <div><b id="dancerCount">8</b><span>KARAKTER</span></div>
+  </div>
+  <div id="startGate"><button id="startBtn">🔊 SAHNEYİ BAŞLAT</button><p>Tarayıcı ses politikası nedeniyle tek tıkla müzik + ışık senkronu başlar.</p></div>
+  <div id="panel">
+    <header>🎛 CANLI REJİ <button id="collapse">–</button></header>
+    <div id="panelBody">
+      <div class="row"><label>Sahne Modu</label><select id="modeSel">
+        <option value="auto">Otomatik Akış</option><option value="verse">Verse (Sakin)</option>
+        <option value="build">Build-up</option><option value="drop">DROP</option><option value="final">FİNAL</option>
+      </select></div>
+      <div class="row"><label>Müzik</label><select id="musicSel">
+        <option value="126">EDM 126</option><option value="140">Hard 140</option><option value="100">Groove 100</option>
+      </select></div>
+      <div class="row"><label>Efekt Şiddeti</label><input id="fxRange" type="range" min="0" max="100" value="80"/></div>
+      <div class="row"><label>Kamera</label><select id="camSel">
+        <option value="auto">Otomatik Yönetmen</option><option value="wide">Geniş</option>
+        <option value="dj">DJ Yakın</option><option value="dance">Dans Takip</option><option value="top">Tepe</option>
+      </select></div>
+      <div class="row"><label>Format</label><select id="fmtSel">
+        <option value="dual">Dikey + Yatay</option><option value="vert">Yalnız Dikey 9:16</option>
+      </select></div>
+      <div class="row btns">
+        <button data-gift="rose">🌹 Gül</button>
+        <button data-gift="heart">💜 Kalp</button>
+        <button data-gift="castle">🏰 Kale</button>
+        <button data-gift="whale">🐳 Balina</button>
+      </div>
+      <div class="row btns">
+        <button id="joinBtn">👋 Katılım</button>
+        <button id="finalBtn">🔥 FİNAL</button>
+        <button id="stressBtn">⚡ Yoğunluk Testi</button>
+      </div>
+      <div class="row sep">FANTASTİK KADRO</div>
+      <div class="row btns" id="roster">
+        <button data-char="lion">🦁</button>
+        <button data-char="tiger">🐯</button>
+        <button data-char="panda">🐼</button>
+        <button data-char="fox">🦊</button>
+      </div>
+      <div class="row btns">
+        <button data-char="wolf">🐺</button>
+        <button data-char="bear">🐻</button>
+        <button data-char="dragon">🐉</button>
+        <button data-char="hero">🦸</button>
+      </div>
+      <div class="row status"><span id="connDot" class="ok"></span><small id="connTxt">TikTok Köprüsü: SİMÜLASYON</small></div>
+      <div class="row"><small id="queueTxt">Kuyruk: boş</small></div>
+    </div>
+  </div>
+  <div id="toast"></div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

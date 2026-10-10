@@ -1,0 +1,28 @@
+{
+  "name": "playground",
+  "version": "1.0.0",
+  "description": "<!-- omgithub:readme:start --> ## 🚀 Build, play, and remix with OMGithub",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kingggcinemaaa7-png/PlayGround.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kingggcinemaaa7-png/PlayGround/issues"
+  },
+  "homepage": "https://github.com/kingggcinemaaa7-png/PlayGround#readme",
+  "dependencies": {
+    "@types/three": "^0.170.0",
+    "three": "^0.170.0",
+    "typescript": "^5.6.2",
+    "vite": "^6.2.0"
+  }
+}
