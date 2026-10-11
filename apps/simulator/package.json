@@ -1,0 +1,11 @@
+{
+  "name": "@vadi/simulator",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node sim.mjs --scenario scenario-3min.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

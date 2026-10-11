@@ -1,0 +1,10 @@
+{
+  "$comment": "Hediye adı -> özel etkinlik eşlemesi (elmas eşiğine ek). Örnek: Gül -> gül fırtınası katkısı.",
+  "byName": {
+    "gül": { "event": "rose_storm", "note": "gül fırtınası katkısı" },
+    "rose": { "event": "rose_storm" },
+    "kalp": { "event": "shoutout_boost" },
+    "heart": { "event": "shoutout_boost" }
+  },
+  "byId": {}
+}

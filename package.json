@@ -1,0 +1,20 @@
+{
+  "name": "kapadokya-beat-vadisi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kapadokya Beat Vadisi — TikTok LIVE yayın ürünü (Master Plan 2.0, FAZ 0)",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "bridge": "npm run start --workspace @vadi/bridge",
+    "sim": "npm run start --workspace @vadi/simulator",
+    "e2e": "node scripts/e2e-faz0.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

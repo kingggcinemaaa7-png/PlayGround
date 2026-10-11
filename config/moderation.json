@@ -1,0 +1,9 @@
+{
+  "$comment": "TR/EN/ES küfür-nefret filtresi (özet — yayıncı panelden genişletir). Leet/boşluk hileleri normalize edilerek yakalanır.",
+  "unmatchedName": "Misafir",
+  "patterns": [
+    "küfür1", "küfür2",
+    "hate1", "spam"
+  ],
+  "bannedUserIds": []
+}

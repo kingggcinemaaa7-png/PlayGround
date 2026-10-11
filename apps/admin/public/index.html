@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Vadi Paneli — yayıncı</title>
+<style>body{font-family:system-ui;background:#0b1020;color:#fff;margin:0;padding:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:#151d33;border-radius:12px;padding:16px}
+button{background:#f90;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;margin:4px}
+pre{background:#0008;padding:12px;border-radius:8px;max-height:300px;overflow:auto}</style>
+</head>
+<body>
+<h1>🏔️ Kapadokya Beat Vadisi — Yayıncı Paneli (FAZ 0)</h1>
+<div class="cards">
+  <div class="card"><h3>Durum</h3><div id="state">…</div></div>
+  <div class="card"><h3>Tek tuş</h3>
+    <button onclick="sys('drop')">DROP tetikle</button>
+    <button onclick="sys('reset')">Sahneyi sıfırla</button>
+  </div>
+  <div class="card"><h3>Test hediyesi</h3>
+    <input id="u" value="u-deneme" style="width:100%"> 
+    <input id="n" value="Deneme Elif" style="width:100%">
+    <button onclick="gift(1)">1💎 Gül</button>
+    <button onclick="gift(60)">60💎 Yıldız</button>
+    <button onclick="gift(1500)">1500💎 Onur</button>
+  </div>
+</div>
+<h3>Olay akışı</h3><pre id="log"></pre>
+<script>
+const log=document.getElementById('log');
+function line(o){log.textContent+=JSON.stringify(o)+"\n";log.scrollTop=1e9;}
+async function gift(diamonds){
+  const body={type:"gift",userId:document.getElementById('u').value,name:document.getElementById('n').value,
+    giftName:diamonds>=1000?"Aslan":diamonds>=50?"Kalp":"Gül",diamonds,repeat:1,repeatEnd:true};
+  await fetch('/ingest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});line({sent:body});
+}
+async function sys(kind){await fetch('/ingest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'system',kind,payload:{}})});}
+async function refresh(){const r=await fetch('/api/state').then(r=>r.json());document.getElementById('state').textContent=JSON.stringify(r.state,null,1);}
+setInterval(refresh,2000);refresh();
+const ws=new WebSocket(`ws://${location.host}`);ws.onmessage=e=>line(JSON.parse(e.data));
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "$comment": "Kapadokya Beat Vadisi — varsayılan yayın config'i (Master Plan 2.0 §4, §14). Tüm eşikler ELMAS cinsinden, panelden değiştirilebilir.",
+  "language": "tr",
+  "tiers": [
+    { "id": 1, "name": "Katılımcı", "minDiamonds": 0, "kind": "chat_join" },
+    { "id": 2, "name": "Dansçı", "minDiamonds": 1, "maxDiamonds": 49, "stageSeconds": [90, 180] },
+    { "id": 3, "name": "Yıldız", "minDiamonds": 50, "maxDiamonds": 299, "skySeconds": 5 },
+    { "id": 4, "name": "Balon Pilotu", "minDiamonds": 300, "maxDiamonds": 999, "skySeconds": 10 },
+    { "id": 5, "name": "Onur Konuğu", "minDiamonds": 1000, "maxDiamonds": 4999, "cinematic": true },
+    { "id": 6, "name": "Baş DJ", "minDiamonds": 5000, "stageSeconds": [10, 20] },
+    { "id": 7, "name": "Vadi Efsanesi", "minDiamonds": 20000, "scope": "season_total", "moonSlot": true }
+  ],
+  "join": {
+    "cooldownSecondsPerUser": 60,
+    "maxNewParticipantsPerMinute": 30,
+    "fuzzyThreshold": 0.82
+  },
+  "streak": {
+    "countOnRepeatEndOnly": true,
+    "note": "Ara olaylar sadece canlı sayaç animasyonu; elmas sayımı repeatEnd'de toplam = elmas x tekrar"
+  },
+  "frontRow": { "frontSlots": 12, "backSlots": 24, "promoteNewestGifters": true },
+  "nameplate": { "baseFontPx": 68, "maxLines": 3, "minScaleOnOverflow": 0.9 },
+  "hype": { "perDiamond": 1, "decayPerSecond": 2, "dropAt": 1000 },
+  "duel": { "durationSeconds": 40, "teamKeywords": { "left": ["sol"], "right": ["sag", "sağ"] } },
+  "moderation": { "filterFile": "moderation.json", "unmatchedName": "Misafir" },
+  "tiktok": { "usernameEnv": "TIKTOK_USERNAME", "reconnectBaseMs": 1000, "reconnectMaxMs": 30000 },
+  "ai": {
+    "enabled": false,
+    "provider": "nvidia",
+    "endpointEnv": "AI_ENDPOINT",
+    "modelEnv": "AI_MODEL",
+    "apiKeyEnv": "AI_API_KEY",
+    "fastTimeoutMs": 3000,
+    "plannerEverySeconds": 75
+  },
+  "obs": { "width": 1080, "height": 1920, "fps": 60 }
+}
