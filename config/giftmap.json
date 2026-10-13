@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "mappings": [
+    { "tiktokGiftId": 5655, "tiktokGiftName": "Gül", "key": "1", "gameEffect": { "effectId": "hype_boost", "hypeValue": 5, "score": 10, "tier": 1, "sfx": "gift_small" } },
+    { "tiktokGiftId": 5660, "tiktokGiftName": "Donut", "key": "2", "gameEffect": { "effectId": "hype_boost", "hypeValue": 12, "score": 40, "tier": 2, "sfx": "gift_medium" } },
+    { "tiktokGiftId": 5656, "tiktokGiftName": "Parmak Kalp", "key": "3", "gameEffect": { "effectId": "combo_boost", "hypeValue": 22, "score": 120, "tier": 3, "comboBonus": true, "sfx": "gift_large", "sceneHint": "portal_glow" } },
+    { "tiktokGiftId": 5877, "tiktokGiftName": "Balon", "key": "4", "gameEffect": { "effectId": "balloon_wave", "hypeValue": 30, "score": 300, "tier": 4, "sfx": "gift_large", "sceneHint": "balloons" } },
+    { "tiktokGiftId": 5832, "tiktokGiftName": "Aslan", "key": "5", "gameEffect": { "effectId": "mega_event", "hypeValue": 55, "score": 1500, "tier": 5, "sceneTrigger": "buyuk_isik_toreni", "sfx": "gift_mega" } },
+    { "tiktokGiftId": 5890, "tiktokGiftName": "DJ Seti", "key": "6", "gameEffect": { "effectId": "drop_boost", "hypeValue": 80, "score": 5000, "tier": 6, "sceneTrigger": "drop", "sfx": "gift_mega" } },
+    { "tiktokGiftId": 6001, "tiktokGiftName": "Efsane Taç", "key": "7", "gameEffect": { "effectId": "legend_event", "hypeValue": 100, "score": 15000, "tier": 7, "sceneTrigger": "safak_finali", "sfx": "gift_legend" } }
+  ],
+  "default": { "gameEffect": { "effectId": "hype_boost", "hypeValue": 1, "score": 2, "tier": 1, "sfx": "gift_small" } }
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kapadokya Beat Vadisi — 3D Desktop Edition</title>
+  <meta name="description" content="Kapadokya Beat Vadisi: peri bacaları arasında geçen profesyonel 3D ritim/etkileşim oyunu. PBR materyaller, GLB/FBX karakter boru hattı, 7 katmanlı sadakat merdiveni." />
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <div class="hud" id="topbar">
+      <div class="card" id="brand">
+        <h1>🏜️ KAPADOKYA <span class="live">● BEAT VADİSİ</span></h1>
+        <p>3D Desktop Edition · PBR + GLB/FBX · 60 FPS</p>
+      </div>
+      <div class="card" id="hypeWrap">
+        <div id="hypeLabel"><span>HYPE BAR — <b id="hypeVal">0</b>/100</span><span id="dropState">DROP hazır değil</span></div>
+        <div id="hypeBar"><div id="hypeFill"></div></div>
+      </div>
+      <div class="card" id="combo"><div class="x" id="comboX">×1</div><small>STREAK COMBO</small></div>
+    </div>
+
+    <div class="hud" id="banner">DROP!</div>
+
+    <div class="hud" id="left">
+      <div class="card"><h2>👑 Sadakat Merdiveni (7)</h2><div id="tiers"></div></div>
+      <div class="card"><h2>🎁 Hediyeler (1–7)</h2><div id="gifts"></div></div>
+    </div>
+
+    <div class="hud" id="right">
+      <div class="card"><h2>🏆 Liderlik</h2><div id="leaders"><div style="color:var(--dim);font-size:12px">Henüz skor yok — hediye gönder!</div></div></div>
+      <div class="card"><h2>⚡ Olaylar</h2><div id="events" style="display:flex;flex-wrap:wrap;gap:6px"></div></div>
+      <div class="card"><h2>📜 Künye / Lisans</h2><div id="credits">Modeller: Sketchfab CC Attribution — <span id="creditNames">yükleniyor…</span></div></div>
+    </div>
+
+    <div class="hud" id="toasts"></div>
+    <div class="hud" id="djSpeech"><b>🎧 DJ Kapadokya:</b> <span id="djText">Vadimize hoş geldin! 1–7 ile hediye gönder, hype'ı doldur, DROP'u patlat!</span></div>
+
+    <div class="hud" id="bottombar">
+      <div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn on" id="btnSim">▶ Simülasyon</button>
+        <button class="btn on" id="btnMusic">🔊 Müzik</button>
+        <button class="btn" id="btnAI">🤖 AI Show-Runner</button>
+        <button class="btn" id="btnCam">🎥 Kamera: <span id="camLabel">Yörünge</span></button>
+        <button class="btn" id="btnSky">🌌 Gökyüzüne Bak</button>
+        <button class="btn" id="btnOBS">📱 OBS 9:16</button>
+        <button class="btn" id="btnFull">⛶ Tam Ekran</button>
+        <span id="help">Sürükle: 360° döndür (gökyüzü dahil) · WSDEQ + tekerlek: uçuş · 1–7 hediye · Space DROP · C kamera · G gökyüzü · R sahne · D düello</span>
+        <span id="score"><b id="scoreVal">0</b><br /><span id="fps">… fps</span> · <span id="gpuInfo"></span></span>
+      </div>
+    </div>
+
+    <div id="loader"><div class="ring"></div><div id="loadMsg">Vadi yükleniyor… PBR materyaller + GLB karakterler</div></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

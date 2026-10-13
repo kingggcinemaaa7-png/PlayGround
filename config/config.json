@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "tiers": {
+    "1": { "name": "Katılımcı", "threshold": 0, "color": "#4A90D9", "label": "Çırak" },
+    "2": { "name": "Dansçı", "threshold": 500, "color": "#7B68EE", "label": "Dansçı" },
+    "3": { "name": "Yıldız", "threshold": 2000, "color": "#E0A030", "label": "Yıldız" },
+    "4": { "name": "Balon Pilotu", "threshold": 5000, "color": "#F5A623", "label": "Pilot" },
+    "5": { "name": "Onur Konuğu", "threshold": 15000, "color": "#9B59B6", "label": "Onur" },
+    "6": { "name": "Baş DJ", "threshold": 50000, "color": "#E74C3C", "label": "Baş DJ" },
+    "7": { "name": "Vadi Efsanesi", "threshold": 150000, "color": "#FFD700", "label": "Efsane" }
+  },
+  "hypeBar": { "max": 100, "decayRate": 2.0, "decayIntervalMs": 1000, "dropThreshold": 100, "dropCooldownMs": 30000 },
+  "streak": { "windowMs": 5000, "comboThresholds": [3, 5, 10], "comboMultipliers": [1.5, 2.0, 3.0] },
+  "cooldown": {
+    "eventCooldownMs": {
+      "drop": 30000,
+      "yildiz_yagmuru": 45000,
+      "duello": 60000,
+      "buyuk_isik_toreni": 120000,
+      "safak_finali": 300000
+    },
+    "tierUpCooldownMs": 5000
+  },
+  "aiRunner": { "tickIntervalMs": 30000, "repetitionWindow": 10, "degradationFallback": "static_event" },
+  "obs": { "width": 1080, "height": 1920, "fps": 60 },
+  "audio": { "ttsDuckLevel": 0.3, "ttsDuckFadeMs": 300, "sfxVolume": 0.7, "musicVolume": 0.5 }
+}

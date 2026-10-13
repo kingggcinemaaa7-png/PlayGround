@@ -1,0 +1,18 @@
+{
+  "name": "kapadokya-beat-vadisi-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kapadokya Beat Vadisi — profesyonel 3D masaüstü ritim/etkileşim oyunu (Three.js PBR + GLB/FBX karakter boru hattı)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  },
+  "devDependencies": {
+    "vite": "6.0.0"
+  }
+}
