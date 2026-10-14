@@ -780,6 +780,7 @@ if (G.music) {
 
 startSim();
 tick();
+window.__kbvBooted = true;
 
 // Hata ayıklama/doğrulama kancası (tarayıcı konsolundan sahne durumu okunur)
 window.__kbv = {

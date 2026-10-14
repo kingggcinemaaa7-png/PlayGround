@@ -5,6 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kapadokya Beat Vadisi — 3D Desktop Edition</title>
   <meta name="description" content="Kapadokya Beat Vadisi: peri bacaları arasında geçen profesyonel 3D ritim/etkileşim oyunu. PBR materyaller, GLB/FBX karakter boru hattı, 7 katmanlı sadakat merdiveni." />
+  <script>
+    // Açılış bekçisi: oyun modülü 15 sn içinde bayrak dikmezse sebebi göster + tekrar dene.
+    // (Önizleme önbelleği / eski bundle / WebGL yokluğu gibi durumlarda takılı "yükleniyor" yerine.)
+    window.__kbvBootAt = Date.now();
+    window.__kbvBootError = null;
+    window.addEventListener('error', function (e) {
+      if (!window.__kbvBooted) window.__kbvBootError = (e.message || 'kaynak yüklenemedi') + '';
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) {
+      if (!window.__kbvBooted) window.__kbvBootError = 'yükleme hatası: ' + (e.reason && e.reason.message || e.reason);
+    });
+    setTimeout(function () {
+      if (window.__kbvBooted) return;
+      var loader = document.getElementById('loader');
+      var msg = document.getElementById('loadMsg');
+      var glOk = (function () {
+        try {
+          var c = document.createElement('canvas');
+          return !!(c.getContext('webgl2') || c.getContext('webgl'));
+        } catch (x) { return false; }
+      })();
+      if (loader) loader.style.display = 'flex';
+      if (msg) msg.innerHTML =
+        '⚠️ Oyun açılamadı (' + Math.round((Date.now() - window.__kbvBootAt) / 1000) + ' sn).<br>' +
+        (window.__kbvBootError ? 'Neden: ' + window.__kbvBootError + '<br>' : 'Neden: oyun dosyası önbellekte takılmış olabilir.<br>') +
+        (glOk ? '' : 'Bu tarayıcıda WebGL kapalı görünüyor — donanım hızlandırmayı açın.<br>') +
+        '<br><button class="btn" onclick="location.reload(true)" style="font-size:15px;padding:10px 22px">🔄 Tekrar Dene (önbelleği temizle)</button>' +
+        '<div style="margin-top:10px;font-size:12px;opacity:.75">İpucu: Ctrl+Shift+R ile sert yenileme yapın.</div>';
+    }, 15000);
+  </script>
 </head>
 <body>
   <div id="app">
