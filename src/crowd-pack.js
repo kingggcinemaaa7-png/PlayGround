@@ -6,7 +6,8 @@
 //   · Kalite düşükse gerçek karakter sayısı azalır, siluet kalabalık devreye girer
 // ============================================================================
 import * as THREE from 'three';
-import { loadAsset, collectCredits } from './assets.js';
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { loadAsset, collectCredits, fitToHeight, stripGroundPlanes } from './assets.js';
 
 const DANCE_ASSETS = [
   'models/dance_hype.glb',
@@ -35,6 +36,7 @@ export class CrowdPack {
     const sources = await Promise.all(DANCE_ASSETS.map(async (p) => {
       try {
         const { group, animations, meta } = await loadAsset(base + p);
+        stripGroundPlanes(group); // filigran zeminini temizle
         this.credits.push(meta ? `"${meta.name}" by ${meta.author} (${meta.license})` : p);
         return { root: group, clips: animations };
       } catch (e) {
@@ -53,7 +55,8 @@ export class CrowdPack {
     const n = Math.min(this.count, positions.length);
     for (let i = 0; i < n; i++) {
       const src = this.sources[i % this.sources.length];
-      const inst = src.root.clone(true);
+      const inst = skeletonClone(src.root); // her kopyaya kendi iskeleti (düzgün skinning)
+      fitToHeight(inst, 1.7 + Math.random() * 0.3);
       inst.userData.beatOffset = Math.random() * Math.PI * 2;
       inst.userData.baseY = 0;
       positions[i].set(inst);

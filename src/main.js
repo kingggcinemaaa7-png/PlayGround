@@ -11,8 +11,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildWorld } from './world.js';
 import { ParticleSystem } from './particles.js';
 import { AudioBus } from './audio.js';
-import { loadAsset, finalizeAsset, collectCredits } from './assets.js';
+import { loadAsset, finalizeAsset, collectCredits, fitToHeight } from './assets.js';
 import { TourCamera } from './camera.js';
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CrowdPack } from './crowd-pack.js';
 import { config, giftmap, TIERS, tierForScore, giftByKey, CooldownManager, StreakTracker, LocalShowRunner } from './state.js';
 
@@ -169,10 +170,12 @@ function finalizeModel(where, root, animations = [], meta = null) {
   finalizeAsset(root, meta);
   root.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
   if (where === 'dj') {
-    // DJ kabininde: tezgahın üstünde (sahne ölçeği 62×34 m)
-    root.scale.setScalar(1.9);
-    root.position.set(0, 7.95, -0.2);
-    root.rotation.y = Math.PI; // sahnedeki kalabalığa dönük
+    // DJ kabininde: yükseklik normalize (~2.9 m, sahne varlığı), tezgahın üstünde
+    root.position.set(0, 0, 0);
+    root.rotation.y = Math.PI;
+    fitToHeight(root, 2.9);
+    root.position.x = 0; root.position.z = -0.4;
+    root.position.y = 7.85; // tezgah tablası üstü
     W.stage.add(root);
     djModel = root;
     if (animations.length) {
@@ -192,9 +195,11 @@ function finalizeModel(where, root, animations = [], meta = null) {
   } else if (where === 'duellocu') {
     // Dans düellosu için 2 kopya (solda/sağda)
     for (const side of [-1, 1]) {
-      const inst = root.clone(true);
-      inst.scale.setScalar(1.7);
-      inst.position.set(side * 5.5, 4.85, 1.5);
+      const inst = skeletonClone(root); // kendi iskeletiyle bağımsız animasyon
+      fitToHeight(inst, 2.2);
+      inst.position.x = side * 5.5;
+      inst.position.y = 4.8;
+      inst.position.z = 1.5;
       inst.rotation.y = -side * 0.5 + (side < 0 ? 0.6 : -0.6);
       inst.visible = false;
       W.stage.add(inst);
@@ -211,16 +216,16 @@ function finalizeModel(where, root, animations = [], meta = null) {
     // sıcak hava balonu filosu — iç aydınlatmalı zarif (gece festivali)
     for (let i = 0; i < 3; i++) {
       const b = root.clone(true);
-      const s = 1.6 + Math.random() * 0.9;
-      b.scale.setScalar(s);
+      fitToHeight(b, 11 + Math.random() * 3); // gerçek balon ölçeği ~12 m
       b.position.set((Math.random() - 0.5) * 46, 12 + Math.random() * 12, -14 - Math.random() * 30);
       b.rotation.y = Math.random() * Math.PI * 2;
       b.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = false;
           if (o.material) {
-            const mats = Array.isArray(o.material) ? o.material : [o.material];
-            o.material = mats.map((m) => {
+            const single = !Array.isArray(o.material);
+            const mats = single ? [o.material] : o.material;
+            const out = mats.map((m) => {
               const nm = m.clone();
               nm.side = THREE.DoubleSide;
               nm.emissive = new THREE.Color(0xffb35c);
@@ -230,10 +235,12 @@ function finalizeModel(where, root, animations = [], meta = null) {
               nm.metalness = 0.0;
               return nm;
             });
+            o.material = single ? out[0] : out;
           }
         }
       });
       // zarfın içindeki sıcak ışığı emissive ile karşıla (yazılım render'de ek ışık yok)
+      b.userData.isBalloon = true;
       scene.add(b);
       characters.balloons.push({ obj: b, phase: Math.random() * 6.28, speed: 0.06 + Math.random() * 0.08, y: b.position.y });
     }
@@ -776,7 +783,7 @@ tick();
 
 // Hata ayıklama/doğrulama kancası (tarayıcı konsolundan sahne durumu okunur)
 window.__kbv = {
-  THREE, G, W, camera, renderer, particles, config, giftmap, tour, dancerPack,
+  THREE, G, W, camera, renderer, particles, config, giftmap, tour, dancerPack, scene, characters,
   q: () => q,
   mode: () => tour.mode,
   dancers: () => dancerPack.instances.filter((i) => i.visible).length,

@@ -102,6 +102,48 @@ function normalizeMaterial(m) {
   return m;
 }
 
+/** Kök modeli hedef boya normalize et (birim/cm karışıklığını giderir).
+ *  Döner: uygulanan ölçek çarpanı. Modelin tabanını y=0'a oturtur. */
+export function fitToHeight(root, targetHeight = 2.0) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (!isFinite(size.y) || size.y <= 1e-6) return 1;
+  const s = targetHeight / size.y;
+  root.scale.multiplyScalar(s);
+  root.updateMatrixWorld(true);
+  // tabanı yere bas
+  const box2 = new THREE.Box3().setFromObject(root);
+  root.position.y -= box2.min.y;
+  return s;
+}
+
+/** Sketchfab zemin/filigran plakalarını temizle (karakter dışındaki geniş-yassı parçalar).
+ *  Kural: yerel kutusu (genişlik > 4 m) VE (yükseklik < 0.6 m) olan mesh'ler
+ *  gerçek karakter olamaz → kaldırılır (zemin diski, grid, marka yazısı). */
+export function stripGroundPlanes(root) {
+  root.updateMatrixWorld(true);
+  const doomed = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox.clone();
+    b.applyMatrix4(o.matrixWorld);
+    // kökün yerel çerçevesine çevir
+    root.worldToLocal(b.min);
+    root.worldToLocal(b.max);
+    const w = Math.max(b.max.x - b.min.x, b.max.z - b.min.z);
+    const h = b.max.y - b.min.y;
+    if (w > 0.8 && h < 0.2 && b.max.y < 2.0) doomed.push(o);
+  });
+  for (const d of doomed) {
+    d.parent?.remove(d);
+    d.geometry?.dispose();
+  }
+  return doomed.length;
+}
+
 /** varlıkların attribution listesini topla (künye paneli) */
 export function collectCredits(objects) {
   return objects

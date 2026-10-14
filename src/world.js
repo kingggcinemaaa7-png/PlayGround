@@ -59,16 +59,17 @@ export function buildWorld(scene, q = { low: false }) {
         // gün batımı — ufukta parlak sıcak bant, yukarı doğru mor → lacivert
         float dy = abs(d.y);
         float horizon = pow(max(0.0, 1.0 - dy * 3.2), 2.4);
-        float band = pow(max(0.0, 1.0 - abs(dy - 0.035) * 26.0), 2.0);
-        vec3 col = vec3(0.012,0.010,0.042);
-        col += vec3(1.05,0.42,0.13) * band * (1.15 + uDawn*0.5);
-        col += vec3(0.72,0.28,0.10) * horizon * 1.25;
-        col += vec3(0.36,0.12,0.30) * smoothstep(0.06,0.42,dy) * 0.95;
-        col += vec3(0.05,0.03,0.14) * smoothstep(0.40,0.92,dy);
+        float sunBand = pow(max(0.0, 1.0 - abs(dy - 0.035) * 26.0), 2.0);
+        // Not: bu shader tonemap edilir; değerler düşük tutulur
+        vec3 col = vec3(0.004,0.0035,0.014);
+        col += vec3(0.42,0.15,0.045) * sunBand * (1.15 + uDawn*0.5);
+        col += vec3(0.30,0.11,0.038) * horizon * 1.15;
+        col += vec3(0.14,0.05,0.12) * smoothstep(0.06,0.42,dy) * 0.9;
+        col += vec3(0.020,0.012,0.055) * smoothstep(0.40,0.92,dy);
 
         // samanyolu
-        float band = exp(-pow((d.x*0.55 + d.z*0.83) * 2.6, 2.0));
-        col += vec3(0.55,0.48,0.78)*0.085 * band * exp(-pow((d.y*0.55)*2.0,2.0));
+        float mwBand = exp(-pow((d.x*0.55 + d.z*0.83) * 2.6, 2.0));
+        col += vec3(0.20,0.17,0.30)*0.085 * mwBand * exp(-pow((d.y*0.55)*2.0,2.0));
 
         // yıldızlar
         vec3 sp = floor(d*520.0);
@@ -76,7 +77,7 @@ export function buildWorld(scene, q = { low: false }) {
         float s = smoothstep(0.9978, 1.0, st);
         s *= smoothstep(0.03, 0.28, h);
         s *= 0.5 + 0.5*sin(uTime*1.6 + st*140.0);
-        col += vec3(0.92,0.94,1.0) * s * 3.0;
+        col += vec3(0.55,0.58,0.66) * s * 1.5;
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -89,7 +90,7 @@ export function buildWorld(scene, q = { low: false }) {
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(340, 96),
     new THREE.MeshStandardMaterial({
-      color: 0xffffff,
+      color: 0x8a6f5a,
       map: groundT.map,
       normalMap: groundT.normalMap,
       roughnessMap: groundT.roughnessMap,
@@ -105,7 +106,7 @@ export function buildWorld(scene, q = { low: false }) {
   // ufuk sisi
   const mist = new THREE.Mesh(
     new THREE.RingGeometry(240, 418, 64),
-    new THREE.MeshBasicMaterial({ color: 0x4a2436, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: 0x2c1626, transparent: true, opacity: 0.20, side: THREE.DoubleSide, depthWrite: false })
   );
   mist.rotation.x = -Math.PI / 2; mist.position.y = 0.6;
   world.add(mist);
@@ -371,7 +372,7 @@ export function buildWorld(scene, q = { low: false }) {
   crowd.castShadow = true;
   const dummy = new THREE.Object3D();
   const crowdData = [];
-  const Z0 = 22, perRow = low ? 20 : 26, rowStep = 2.3;
+  const Z0 = 28, perRow = low ? 20 : 26, rowStep = 2.3; // ön sıralar rigged dansçılarda
   const rows = Math.ceil(crowdCount / perRow);
   for (let i = 0; i < crowdCount; i++) {
     const row = Math.floor(i / perRow);
