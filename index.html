@@ -11,8 +11,17 @@
     // (Önizleme önbelleği / eski bundle / WebGL yokluğu gibi durumlarda takılı "yükleniyor" yerine.)
     window.__kbvBootAt = Date.now();
     window.__kbvBootError = null;
+    window.__kbvBootStack = null;
     window.addEventListener('error', function (e) {
-      if (!window.__kbvBooted) window.__kbvBootError = (e.message || 'kaynak yüklenemedi') + '';
+      if (!window.__kbvBooted) {
+        window.__kbvBootError = (e.message || 'kaynak yüklenemedi') + '';
+        // stack'in ilk anlamlı satırı (dosya: satır: sütun) — hatanın yerini gösterir
+        try {
+          var st = (e.error && e.error.stack) || '';
+          var line = st.split('\n').slice(0, 3).join(' | ').slice(0, 300);
+          if (line) window.__kbvBootStack = line;
+        } catch (x) { /* yoksay */ }
+      }
     }, true);
     window.addEventListener('unhandledrejection', function (e) {
       if (!window.__kbvBooted) window.__kbvBootError = 'yükleme hatası: ' + (e.reason && e.reason.message || e.reason);
@@ -31,6 +40,7 @@
       if (msg) msg.innerHTML =
         '⚠️ Oyun açılamadı (' + Math.round((Date.now() - window.__kbvBootAt) / 1000) + ' sn).<br>' +
         (window.__kbvBootError ? 'Neden: ' + window.__kbvBootError + '<br>' : 'Neden: oyun dosyası önbellekte takılmış olabilir.<br>') +
+        (window.__kbvBootStack ? '<div style="font-size:11px;opacity:.7;word-break:break-all">Yer: ' + window.__kbvBootStack + '</div>' : '') +
         (glOk ? '' : 'Bu tarayıcıda WebGL kapalı görünüyor — donanım hızlandırmayı açın.<br>') +
         '<br><button class="btn" onclick="location.reload(true)" style="font-size:15px;padding:10px 22px">🔄 Tekrar Dene (önbelleği temizle)</button>' +
         '<div style="margin-top:10px;font-size:12px;opacity:.75">İpucu: Ctrl+Shift+R ile sert yenileme yapın.</div>';
