@@ -65,8 +65,10 @@ try {
   gpuName = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : 'unknown';
 } catch { /* yoksay */ }
 const SOFTWARE = /swiftshader|software|llvmpipe|basic render|mesa offscreen/i.test(gpuName);
+// ?forceQuality=high|low — GPU dalını donanımsız ortamda da test eder
+const forceQ = new URLSearchParams(location.search).get('forceQuality');
 const q = {
-  low: SOFTWARE,
+  low: forceQ === 'high' ? false : forceQ === 'low' ? true : SOFTWARE,
   label: SOFTWARE ? `yazılım render (${gpuName.slice(0, 40)})` : gpuName.slice(0, 40),
   shadows: !SOFTWARE,
   particles: SOFTWARE ? 900 : 4000,
@@ -81,6 +83,11 @@ if (SOFTWARE) {
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x120a24, 0.0055);
+
+// Kamera sahneden ÖNCE tanımlanmalı (composer RenderPass onu kullanır;
+// tanımsız-sıra hatası gerçek GPU yolunda açılışı patlatır)
+const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.5, 1600);
+camera.position.set(0, 3.2, 26);
 
 // ---------------------------------------------------------------------------
 // Dünya + parçacıklar
@@ -98,9 +105,6 @@ if (!q.low) {
   composer.addPass(new OutputPass());
   composer.setSize(innerWidth, innerHeight);
 }
-
-const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.5, 1600);
-camera.position.set(0, 3.2, 26);
 
 // ---------------------------------------------------------------------------
 // Işıklandırma
