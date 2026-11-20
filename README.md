@@ -1,6 +1,6 @@
-# Fetih Korteji — TikTok Live 3D Projesi (v2.2)
+# Fetih Korteji — TikTok Live 3D Yayın Oyunu
 
-Canlı TikTok yayın verilerini `tiktok-live-connector` ile alan, Socket.IO üzerinden Three.js sahneye ve yönetim paneline taşıyan 9:16 / 16:9 Osmanlı-Selçuklu kortej oyunudur.
+Express, Socket.IO, TikTok Live Connector ve Three.js ile çalışan 9:16 / 16:9 Osmanlı-Selçuklu canlı yayın sahnesi.
 
 ## Çalıştırma
 
@@ -9,45 +9,37 @@ npm install
 npm start
 ```
 
-- Oyun: `http://localhost:3002/`
-- Yönetim: `http://localhost:3002/admin.html`
-- Varsayılan port: `3002` (`PORT` ortam değişkeni ile değiştirilebilir)
+- Oyun: `http://localhost:3000/`
+- Yönetim paneli: `http://localhost:3000/admin.html`
+- Varsayılan port `3000`, `PORT` ortam değişkeni ile değiştirilebilir.
 
-## TikTok Bağlantısı
+## TikTok bağlantısı
 
-Yönetim panelindeki kullanıcı adı alanına canlı yayın sahibi kullanıcı adını girip **Bağlan** düğmesine basın. Hediye kataloğu bağlantı başarılı olduğunda `data/tiktok_gifts_cache.json` dosyasına yazılır. Paket ve API sürümleri `tiktok-live-connector`'ın resmi etkin sürümüne göre çalışır.
+Admin panelindeki kullanıcı adı alanına `@` olmadan yayıncı kullanıcı adını girin ve **Bağlan** düğmesine basın. Gerçek hediye kataloğu yayına bağlanınca `getAvailableGifts()` ile çekilir ve `data/tiktok_gifts_cache.json` dosyasına yazılır. Profil proxy endpoint'i:
+
+`/api/avatar?url=<https://...>`
+
+Server, gift olaylarında `giftType === 1` için `repeatEnd === false` durumlarını tekrar sayım olarak filtreler.
 
 ## Kontroller
 
-- Oyun ekranında `F9`: 9:16 ↔ 16:9
-- İlk tıklama: tarayıcı autoplay kuralı için Web Audio API'yi açar
-- Yönetim ekranından canlı bağlanma kesme, eşleme, ses, safe-zone ve simülasyon yapılabilir
-
-## Harici dosya gerektirmeyen sesler
-
-`public/js/sound_engine.js`, MP3/WAV yerine Web Audio API osilatörleri, noise bufferları, filtreler ve reverb benzeri metalik kuyruklar üretir.
+- Oyun ekranında `F9`: 9:16 / 16:9 geçişi
+- İlk kullanıcı tıklaması: Web Audio API'yi açar
+- Admin: bağlantı, eşleştirme, ses, Safe-Zone, simülasyon ve sıralama
 
 ## Blender 4.x modelleri
 
-Python betikleri `public/models/*.glb` klasörünü üretir:
-
 ```bash
-blender -b --python blender/fetih_yolu.py
-blender -b --python blender/nefer.py
-blender -b --python blender/at.py
-blender -b --python blender/otag_taht.py
-blender -b --python blender/mehter_mancinik.py
-blender -b --python blender/sadrazam_muhur.py
+npm run blender-assets
 ```
 
-Hepsi bir toplu üretim için `npm run generate-models` scriptini kullanır. Blender yüklü değilse geçici modeller sahnede prosedürel üçgen/geometri ile çalışmaya devam eder.
+veya Blender'ta betiği çalıştırın:
 
-## Performans varsayımları
+```text
+blender -b -P blender/build_all.py
+```
 
-- 150 oyuncuya kadar sıra önbelleği ve sahne nesne sınırı uygulanır.
-- Askerler paylaşılan geometri/malzeme ile prosedürel olarak oluşturulur.
-- Kamera court/subject/catapult/mehter state machine kullanır ve lerp ile yumuşak geçiş yapar.
-- TikTok CDN avatarları `/api/avatar?url=...` sunucu proxy cache'i üzerinden yüklenir.
+Çıktılar `public/models/` klasöründedir: `fetih_yolu.glb`, `nefer.glb`, `at.glb`, `otag_taht.glb`, `mehter_davul.glb`, `mancinik.glb`, `sadrazam_muhur.glb`.
 
 ## Test
 
@@ -55,6 +47,6 @@ Hepsi bir toplu üretim için `npm run generate-models` scriptini kullanır. Ble
 npm test
 ```
 
-## Notlar
+## Varsayım
 
-TikTok canlı WebSocket teslimatı ve yayın oturumunun bulunabilirliği hesabın/odanın TikTok tarafındaki erişilebilirliğine bağlıdır. Geliştirme ortamında liste ve simülasyon akışı oturumlardan bağımsız çalışır.
+TikTok'un 2026 gerçek kataloğu canlı oturum bağlandığında sunucu tarafından çekilir; oturum yokken admin, önbelleği veya varsayılan hediye akışını kullanır. Üç boyutlu sahne CDN Three.js üzerinden başlar ve ağ yoksa görsel önbelleğe alınmış boyutlarda kullanılabilir.

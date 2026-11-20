@@ -1,11 +1,11 @@
-import bpy, os, sys
-sys.path.insert(0,os.path.dirname(__file__))
-from common import *
-reset_scene()
-gold=mat('Osmanli_Yaprak_Altin',(0.82,.55,.10),.8,.22); red=mat('Saltanat_Kadifesi',(0.45,.025,.018),.05,.45); white=mat('Hilal_Krem',(0.9,.82,.55),.15,.35)
-cube('Taht_Govde',(0,1.2,0),(5,.8,3),red,.2)
-for x in (-2.2,2.2): cube('Altin_Ayak',(x,2.3,0),(.45,3.8,.45),gold,.08)
-cube('Taht_Arkalik',(0,4.8,-1.25),(5,5,.45),gold,.08)
-cube('Kadife_Koltuk',(0,2.8,.3),(4.5,.6,2.2),red,.18)
-for z in (-1.4,1.4): cylinder('Sancak_Diregi',(z*1.2,4.7,0),.08,7,gold,10)
-export_glb('otag_taht.glb')
+import bpy, os
+bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
+out=os.path.abspath(os.path.join(os.path.dirname(__file__),'..','public','models')); os.makedirs(out,exist_ok=True)
+gold=bpy.data.materials.new('Altin_Varak'); gold.diffuse_color=(.82,.58,.18,1); gold.use_nodes=True
+p=gold.node_tree.nodes['Principled BSDF']; p.inputs['Metallic'].default_value=.9; p.inputs['Roughness'].default_value=.22
+red=bpy.data.materials.new('Kadife'); red.diffuse_color=(.55,.04,.04,1); red.use_nodes=True
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,.5,0)); base=bpy.context.object; base.name='Saltanat_Tahti'; base.dimensions=(4,.8,3); bpy.ops.object.transform_apply(location=False,rotation=False,scale=True); base.data.materials.append(gold)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,2.5,-1.2)); back=bpy.context.object; back.dimensions=(4,4,.35); bpy.ops.object.transform_apply(location=False,rotation=False,scale=True); back.data.materials.append(red)
+for x in (-2,2):
+ bpy.ops.mesh.primitive_cylinder_add(vertices=16,radius=.25,depth=4,location=(x,2,0)); bpy.context.object.data.materials.append(gold)
+bpy.ops.export_scene.gltf(filepath=os.path.join(out,'otag_taht.glb'),export_format='GLB')

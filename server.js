@@ -3,147 +3,67 @@ const http = require('http');
 const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
-
-let TikTokLive;
-try { ({ WebcastPushConnection: TikTokLive } = require('tiktok-live-connector')); }
-catch (e) { console.warn('TikTok connector yüklenemedi:', e.message); }
+let TikTokLiveConnection;
+try { ({ WebcastPushConnection: TikTokLiveConnection } = require('tiktok-live-connector')); } catch(e) {}
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-const ROOT = __dirname;
-const PORT = process.env.PORT || 3002;
+const io = new Server(server,{cors:{origin:'*'}});
+app.use(express.json()); app.use(express.static(path.join(__dirname,'public')));
 
-app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(ROOT, 'public')));
+const DATA=path.join(__dirname,'data'); const CONFIG=path.join(__dirname,'config/gifts_mapping.json');
+const readJson=(p,f)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return f}};
+const writeJson=(p,v)=>fs.writeFileSync(p,JSON.stringify(v,null,2));
+let live=null, liveStatus={state:'Yayın bekleniyor',message:'Bağlantı yok'}, totals={likes:0,gifts:0,viewers:0};
 
-const readJson = (file, fallback) => {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-};
-const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2));
-
-const giftsFile = path.join(ROOT, 'data/tiktok_gifts_cache.json');
-const mappingFile = path.join(ROOT, 'config/gifts_mapping.json');
-const leaderboardFile = path.join(ROOT, 'data/leaderboard.json');
-for (const [file, value] of [[mappingFile, {}], [leaderboardFile, { players: [], stats: {} }]]) {
-  if (!fs.existsSync(file)) writeJson(file, value);
-}
-
-let liveConnection = null;
-let liveState = { status: 'Beklemede', username: null, viewerCount: 0, likes: 0, coins: 0 };
-
-const avatarCache = new Map();
-app.get('/api/avatar', async (req, res) => {
-  const url = req.query.url;
-  if (!url || !/^https:\/\/(?:[^\s/]+\.)?(?:tiktokcdn\.com|tiktokcdn-us\.com)/i.test(url)) return res.status(400).end();
-  if (avatarCache.has(url)) return res.type('png').send(avatarCache.get(url));
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Avatar HTTP ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    avatarCache.set(url, buffer);
-    res.set('Cache-Control', 'public, max-age=86400').type(response.headers.get('content-type') || 'image/jpeg').send(buffer);
-  } catch (error) { res.status(502).json({ error: 'Avatar indirilemedi' }); }
+app.get('/api/state',(req,res)=>res.json({status:liveStatus,totals,leaderboard:readJson(path.join(DATA,'leaderboard.json'),[]),mapping:readJson(CONFIG,{})}));
+app.post('/api/connect',(req,res)=>{ connect(req.body.username); res.json({ok:true}); });
+app.post('/api/disconnect',(req,res)=>{ if(live?.disconnect)live.disconnect(); live=null; setStatus('Yayın bekleniyor','Bağlantı kesildi'); res.json({ok:true}); });
+app.post('/api/mapping',(req,res)=>{writeJson(CONFIG,req.body||{}); io.emit('mapping',req.body); res.json({ok:true});});
+app.post('/api/settings',(req,res)=>{io.emit('settings',req.body||{}); res.json({ok:true});});
+app.post('/api/simulate',(req,res)=>{handleAction(req.body||{},true);res.json({ok:true});});
+app.get('/api/gifts',(req,res)=>res.json(readJson(path.join(DATA,'tiktok_gifts_cache.json'),[])));
+app.get('/api/avatar',async(req,res)=>{
+  try{const u=String(req.query.url||''); if(!/^https:\/\//.test(u))return res.status(400).end();
+    const r=await fetch(u); if(!r.ok)return res.sendStatus(404); res.set('Content-Type',r.headers.get('content-type')||'image/jpeg'); res.set('Cache-Control','public,max-age=86400'); r.arrayBuffer().then(b=>res.end(Buffer.from(b))).catch(()=>res.sendStatus(500));
+  }catch(e){res.sendStatus(500)}
 });
-
-app.get('/api/status', (_, res) => res.json(liveState));
-app.get('/api/gifts', (_, res) => res.json(readJson(giftsFile, [])));
-app.get('/api/mappings', (_, res) => res.json(readJson(mappingFile, {})));
-app.post('/api/mappings', (req, res) => {
-  writeJson(mappingFile, req.body || {});
-  io.emit('config:update', req.body);
-  res.json({ ok: true });
-});
-app.get('/api/leaderboard', (_, res) => res.json(readJson(leaderboardFile, { players: [], stats: {} })));
-app.post('/api/leaderboard', (req, res) => {
-  writeJson(leaderboardFile, req.body);
-  io.emit('leaderboard:update', req.body);
-  res.json({ ok: true });
-});
-
-function setStatus(status, extra = {}) {
-  liveState = { ...liveState, status, ...extra };
-  io.emit('live:status', liveState);
-  console.log('[TikTok Live]', liveState.status, liveState.username || '');
+function setStatus(state,message){liveStatus={state,message};io.emit('status',liveStatus);console.log(`[TikTok] ${state}: ${message}`)}
+async function connect(username){
+  if(!TikTokLiveConnection)return setStatus('Hata','tiktok-live-connector yüklenemedi');
+  if(live?.disconnect)live.disconnect(); const clean=String(username||'').replace(/^@/,'').trim(); if(!clean)return setStatus('Hata','Kullanıcı adı gerekli');
+  setStatus('Yeniden bağlanıyor',`@${clean} aranıyor`);
+  try{live=new TikTokLiveConnection(clean,{processInitialData:true,enableExtendedGiftInfo:true});
+    live.connect().then(async state=>{
+      setStatus('Bağlandı',`@${clean} canlı yayına bağlandı`);
+      try{const gifts=await live.getAvailableGifts();const arr=(gifts||[]).map(g=>({id:g.giftId||g.id,name:g.name||g.giftName,diamonds:g.diamondCount||g.diamond||g.cost||0,image:g.imageUrl||g.icon?.url||g.image?.url||''}));writeJson(path.join(DATA,'tiktok_gifts_cache.json'),arr);io.emit('gifts',arr)}catch(e){console.error(e)}
+    }).catch(e=>setStatus('Hata',e.message||'Bağlantı başarısız'));
+    live.on('chat',d=>handleAction({type:'chat',uniqueId:d.uniqueId,nickname:d.nickname,profilePictureUrl:d.profilePictureUrl,comment:d.comment},false));
+    live.on('like',d=>{totals.likes+=d.likeCount||1;io.emit('stats',totals);if(d.likeCount>0)handleAction({type:'like',uniqueId:d.uniqueId,nickname:d.nickname,profilePictureUrl:d.profilePictureUrl},false)});
+    live.on('member',d=>handleAction({type:'member',uniqueId:d.uniqueId,nickname:d.nickname,profilePictureUrl:d.profilePictureUrl},false));
+    live.on('roomUser',d=>{totals.viewers=d.viewerCount||0;io.emit('stats',totals)});
+    live.on('gift',d=>{
+      if(d.giftType===1 && d.repeatEnd===false)return;
+      const gems=d.diamondCount||d.gift?.diamondCount||d.repeatCount*1||1; totals.gifts+=gems* (d.repeatCount||1);io.emit('stats',totals);
+      handleAction({type:'gift',giftId:String(d.giftId||d.gift?.giftId||''),repeatCount:d.repeatCount||1,uniqueId:d.uniqueId,nickname:d.nickname,profilePictureUrl:d.profilePictureUrl,diamonds:gems*(d.repeatCount||1)},false);
+    });
+    live.on('disconnected',()=>setStatus('Yayını bekliyor','Yayın kapandı; yeniden bağlanmayı bekliyor'));
+  }catch(e){setStatus('Hata',e.message)}
 }
-
-async function connectTikTok(username) {
-  if (!TikTokLive) return setStatus('Hata', { error: 'tiktok-live-connector kurulu değil' });
-  await disconnectTikTok(false);
-  const clean = username.replace(/^@/, '').trim();
-  if (!clean) return setStatus('Hata', { error: 'Kullanıcı adı gerekli' });
-  liveState = { status: 'Bağlanıyor', username: clean, viewerCount: 0, likes: 0, coins: 0 };
-  io.emit('live:status', liveState);
-
-  liveConnection = new TikTokLive(clean, { processInitialData: false, enableExtendedGiftInfo: true, reconnectOnError: true, reconnectIntervalMs: 3000 });
-  liveConnection.connect().then(async state => {
-    setStatus('Bağlandı', { viewerCount: state?.roomInfo?.userCount || liveState.viewerCount });
-    try {
-      const gifts = await liveConnection.getAvailableGifts();
-      const normalized = (gifts || []).map(g => ({ id: g.gift_id ?? g.id, name: g.name, diamond: g.diamond_count ?? g.diamondCost ?? g.diamond_count ?? 0, image: g.image?.url_list?.[0] || g.icon?.url_list?.[0] || g.image_url || g.icon_url || '' }));
-      writeJson(giftsFile, normalized);
-      io.emit('gifts:update', normalized);
-      console.log(`[Hediye Kataloğu] ${normalized.length} hediye cache'lendi`);
-    } catch (e) { console.warn('[Hediye Kataloğu]', e.message); }
-  }).catch(error => setStatus('Hata/Yeniden Bağlanıyor', { error: error.message }));
-
-  liveConnection.on('chat', data => io.emit('live:event', normalizeEvent('chat', data, data.comment)));
-  liveConnection.on('like', data => {
-    const count = data.likeCount || 1;
-    liveState.likes += count;
-    io.emit('live:stats', liveState);
-    io.emit('live:event', normalizeEvent('like', data, `+${count} beğeni`));
-  });
-  liveConnection.on('member', data => io.emit('live:event', normalizeEvent('member', data, 'odaya katıldı')));
-  liveConnection.on('gift', data => {
-    if (data.giftType === 1 && data.repeatEnd === false) return;
-    const coins = (data.repeatCount || 1) * (data.giftDiamondCount || data.diamondCount || data.gift?.diamond_count || 0);
-    liveState.coins += coins;
-    io.emit('live:stats', liveState);
-    io.emit('live:event', normalizeEvent('gift', data, data.giftName || data.gift?.name || 'Hediye', coins));
-  });
-  liveConnection.on('roomUser', data => { liveState.viewerCount = data.viewerCount || data.userCount || liveState.viewerCount; io.emit('live:stats', liveState); });
-  liveConnection.on('disconnected', () => setStatus('Bağlantı Kesildi'));
-  liveConnection.on('error', error => setStatus('Hata/Yeniden Bağlanıyor', { error: error.message }));
+function handleAction(d,simulation){
+  const mapping=readJson(CONFIG,{}); let action=null,profile=d.profilePictureUrl||'';
+  if(d.type==='chat' && /^\s*!katil/i.test(d.comment||''))action='JOIN_MARCH';
+  if(d.type==='like')action=mapping.likeAction||'JOIN_MARCH';
+  if(d.type==='gift'){action=mapping[d.giftId]; if(!action){const diamonds=d.diamonds||0;action=diamonds>=500?'RANK_VIZIER':diamonds>=300?'EVENT_SEAL':diamonds>=100?'RANK_CAVALRY':diamonds>=50?'EVENT_CATAPULT':diamonds>=30?'EVENT_MEHTER':diamonds>=10?'RANK_SANCAKTAR':diamonds>=1?'RANK_SIPAHI':'JOIN_MARCH'}}
+  if(d.type==='member')action='JOIN_MARCH';
+  if(d.action)action=d.action;
+  if(!action)return;
+  const event={...d,action,nickname:d.nickname||d.uniqueId||'Misafir',uniqueId:d.uniqueId||d.nickname||'guest-'+Date.now(),avatar:profile};
+  io.emit('gameAction',event); console.log('[Oyun]',event.action,event.nickname);
+  if(d.type==='chat'||d.type==='member'||d.type==='gift'||simulation){savePlayer(event)}
 }
-
-function normalizeEvent(type, data, label, coins = 0) {
-  const user = data.user || data.uniqueId || data.nickname || {};
-  return {
-    type, label, coins,
-    uniqueId: data.uniqueId || user.uniqueId || user.unique_id || 'misafir',
-    nickname: data.nickname || user.nickname || user.uniqueId || 'Misafir',
-    profilePictureUrl: data.profilePictureUrl || user.profilePictureUrl || user.profile_picture?.url_list?.[0] || '',
-    repeatCount: data.repeatCount || 1,
-    timestamp: Date.now()
-  };
-}
-
-async function disconnectTikTok(update = true) {
-  if (liveConnection) { try { liveConnection.disconnect(); } catch {} liveConnection = null; }
-  if (update) setStatus('Bağlantı Kesildi', { username: null });
-}
-
-io.on('connection', socket => {
-  socket.emit('live:status', liveState);
-  socket.emit('gifts:update', readJson(giftsFile, []));
-  socket.emit('config:update', readJson(mappingFile, {}));
-  socket.emit('leaderboard:update', readJson(leaderboardFile, { players: [], stats: {} }));
-  socket.on('live:connect', ({ username }) => connectTikTok(username));
-  socket.on('live:disconnect', () => disconnectTikTok());
-  socket.on('live:test', event => io.emit('live:event', { ...event, type: event.type || 'gift', timestamp: Date.now(), profilePictureUrl: event.profilePictureUrl || '' }));
-  socket.on('game:settings', settings => io.emit('game:settings', settings));
-  socket.on('leaderboard:kick', ({ uniqueId }) => {
-    const board = readJson(leaderboardFile, { players: [], stats: {} });
-    board.players = (board.players || []).filter(p => p.uniqueId !== uniqueId);
-    writeJson(leaderboardFile, board);
-    io.emit('leaderboard:update', board);
-  });
-  socket.on('leaderboard:reset', () => {
-    const board = { players: [], stats: { likes: 0, coins: 0 } };
-    writeJson(leaderboardFile, board);
-    io.emit('leaderboard:update', board);
-  });
-});
-
-server.listen(PORT, '0.0.0.0', () => console.log(`Fetih Korteji çalışıyor: http://0.0.0.0:${PORT}`));
+function savePlayer(e){const p=path.join(DATA,'leaderboard.json');let list=readJson(p,[]);let x=list.find(v=>v.uniqueId===e.uniqueId);if(!x){x={uniqueId:e.uniqueId,nickname:e.nickname,avatar:e.avatar,rank:'Nefer',score:0};list.push(x)}
+ if(e.action==='RANK_VIZIER')x.rank='Vezir';else if(e.action==='RANK_CAVALRY')x.rank='Akıncı';else if(e.action==='RANK_SANCAKTAR')x.rank='Sancaktar';else if(e.action==='RANK_SIPAHI')x.rank='Sipahi';if(e.action?.startsWith('EVENT')||e.action?.startsWith('RANK') )x.score+=e.diamonds||100;writeJson(p,list);io.emit('leaderboard',list)}
+io.on('connection',socket=>{socket.emit('status',liveStatus);socket.emit('stats',totals);socket.emit('leaderboard',readJson(path.join(DATA,'leaderboard.json'),[]));socket.emit('mapping',readJson(CONFIG,{}));socket.emit('gifts',readJson(path.join(DATA,'tiktok_gifts_cache.json'),[]));});
+setStatus('Yayını bekliyor','Hazır');
+const PORT=process.env.PORT||3000;server.listen(PORT,'0.0.0.0',()=>console.log(`Ottoman Live running http://localhost:${PORT}`));

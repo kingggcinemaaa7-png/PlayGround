@@ -1,16 +1,15 @@
-import bpy, os, sys
-sys.path.insert(0,os.path.dirname(__file__))
-from common import *
-reset_scene()
-brown=mat('At_Tabakani',(0.20,.075,.035),0,.75); red=mat('At_Donus_Kirmizi',(0.48,.035,.025),.05,.55); gold=mat('At_Capraz_Altin',(0.75,.50,.12),.7,.25)
-cube('At_Govde',(0,1.7,0),(3.8,.9,1.45),brown,.3)
-cube('At_Boynu',(1.2,2.6,.0),(.9,1.8,.8),brown,.2)
-for x in (-1.2,1.2):
-    for z in (-.55,.55): cube('At_Ayak',(x,.65,z),(.35,1.4,.35),brown,.08)
-cube('Zirhli_Ortu',(0,2.15,0),(3.6,.18,1.5),red,.15)
-for z in (-.62,.62): cube('Altin_Kispet',(0,1.25,z),(3.2,.12,.12),gold,.04)
+import bpy, os
+bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
+out=os.path.abspath(os.path.join(os.path.dirname(__file__),'..','public','models')); os.makedirs(out,exist_ok=True)
+def mat(name,color,metal=0):
+ m=bpy.data.materials.new(name); m.diffuse_color=(*color,1); m.use_nodes=True
+ p=m.node_tree.nodes['Principled BSDF']; p.inputs['Metallic'].default_value=metal; p.inputs['Roughness'].default_value=.55
+ return m
+horse=mat('At_Deri',(.25,.10,.06)); armor=mat('At_Zirh',(.48,.50,.48),.7); cloth=mat('Islemeli_Ortu',(.5,.05,.04))
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,1.4,0)); body=bpy.context.object; body.name='At_Govde'; body.dimensions=(1.4,.9,2.8); bpy.ops.object.transform_apply(location=False,rotation=False,scale=True); body.data.materials.append(horse)
+for x in (-.45,.45):
+ for z in (-1,.9):
+  bpy.ops.mesh.primitive_cylinder_add(vertices=10,radius=.12,depth=1.3,location=(x,.45,z)); bpy.context.object.data.materials.append(horse)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,1.75,0)); cover=bpy.context.object; cover.name='Zirhli_Ortu'; cover.dimensions=(1.55,.12,2.2); bpy.ops.object.transform_apply(location=False,rotation=False,scale=True); cover.data.materials.append(cloth)
 bpy.context.scene.frame_start=1; bpy.context.scene.frame_end=60
-for frame in (1,15,30,45,60):
-    bpy.context.scene.frame_set(frame)
-    # Trot ve RearUp olarak GLB-clip adları dışa aktarma öncesi zamanı işaretler
-export_glb('at.glb')
+bpy.ops.export_scene.gltf(filepath=os.path.join(out,'at.glb'),export_format='GLB',export_animations=True)

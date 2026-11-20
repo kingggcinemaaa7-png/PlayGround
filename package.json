@@ -1,16 +1,16 @@
 {
-  "name": "feth-korteji-live-studio",
+  "name": "ottoman-conquest-live",
   "version": "2.2.0",
-  "description": "3D Osmanlı/Selçuklu TikTok Live kortej oyun sistemi",
-  "main": "server.js",
+  "private": true,
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/server.test.js",
-    "generate-models": "for f in blender/*.py; do blender -b --python \"$f\"; done"
+    "test": "node --test test/*.test.js",
+    "blender-assets": "python3 blender/build_all.py"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "socket.io": "^4.8.1",
+    "express": "latest",
+    "socket.io": "latest",
     "tiktok-live-connector": "latest"
   }
 }
