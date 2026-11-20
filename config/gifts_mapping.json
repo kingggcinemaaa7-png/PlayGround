@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "likes": "BOOST_STOVE",
+  "commands": {
+    "1": "JOIN_CUSTOMER",
+    "2": "JOIN_APPRENTICE"
+  },
+  "ranges": [
+    { "min": 1, "max": 9, "action": "SPAWN_IMPATIENT" },
+    { "min": 10, "max": 29, "action": "OKEY_FIGHT" },
+    { "min": 30, "max": 99, "action": "THROW_TOST_CAY" },
+    { "min": 100, "max": 299, "action": "ZABITA_RAID" },
+    { "min": 300, "max": 999999, "action": "MUHTAR_VIP" }
+  ],
+  "overrides": {},
+  "settings": {
+    "roundSeconds": 300,
+    "chaosTarget": 100,
+    "timeOfDay": "dusk",
+    "lightIntensity": 1,
+    "bloom": 0.85,
+    "fog": 0.45,
+    "volume": 0.65,
+    "muted": false,
+    "aspect": "auto",
+    "autoDemo": true
+  }
+}

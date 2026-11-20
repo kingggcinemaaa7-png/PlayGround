@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0812" />
+  <meta name="description" content="3D Çay Ocağı Kaosu: Mahalle Meydanı — TikTok Live kontrollü, prosedürel sesli 3D mahalle kıraathanesi oyunu." />
+  <title>Çay Ocağı Kaosu — Mahalle Meydanı</title>
+  <link rel="stylesheet" href="/css/game.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app" data-ratio="landscape">
+    <div id="stage">
+      <canvas id="scene" aria-label="3D mahalle meydanı oyun sahnesi"></canvas>
+
+      <div class="grade" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+
+      <header class="hud-top">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" width="30" height="30">
+              <path d="M11 13h16l-1.6 12.2A5.5 5.5 0 0 1 20 30h-2a5.5 5.5 0 0 1-5.4-4.8L11 13Z" fill="#e8b46b" stroke="#3a2313" stroke-width="1.4"/>
+              <path d="M12 17h14" stroke="#fff2d4" stroke-width="1.2" opacity=".65"/>
+              <path d="M18 13c0-2 1.4-2.6 1.4-4.2M23 13c0-2 1.4-2.6 1.4-4.2" stroke="#ffe3ad" stroke-width="1.4" stroke-linecap="round" opacity=".85"/>
+              <path d="M27 16.5c3.2-.4 3.4 3.7.6 4" stroke="#e8b46b" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="brand-text">
+            <strong>ÇAY OCAĞI KAOSU</strong>
+            <em>MAHALLE MEYDANI</em>
+          </span>
+        </div>
+
+        <div class="live-cluster">
+          <span class="live-pill"><i class="live-dot"></i> CANLI</span>
+          <span class="viewers" title="İzleyici">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5c5.4 0 9.2 5.1 9.8 6.3.2.4.2.9 0 1.4C21.2 13.9 17.4 19 12 19s-9.2-5.1-9.8-6.3a1.7 1.7 0 0 1 0-1.4C2.8 10.1 6.6 5 12 5Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+            <b id="viewer-count">1.248</b>
+          </span>
+        </div>
+      </header>
+
+      <section class="scoreboard" aria-label="Tur ve kaos durumu">
+        <div class="scoreboard-nails" aria-hidden="true"></div>
+        <div class="round-row">
+          <span class="round-pill">TUR <b id="round-num">1</b></span>
+          <span class="round-state" id="round-state">OYUN</span>
+        </div>
+        <div class="timer" id="timer">05:00</div>
+        <div class="chaos-head">
+          <span>MEYDAN KAOSU</span>
+          <b id="chaos-pct">%12</b>
+        </div>
+        <div class="chaos-track" role="progressbar" aria-label="Kaos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12">
+          <div class="chaos-fill" id="chaos-fill"></div>
+          <div class="chaos-gloss"></div>
+          <span class="tick" style="left:25%"></span>
+          <span class="tick" style="left:50%"></span>
+          <span class="tick" style="left:75%"></span>
+        </div>
+        <div class="score-row">
+          <span><i class="dot chat"></i> CHAT <b id="score-chat">0</b></span>
+          <span><i class="dot cayci"></i> ÇAYCI <b id="score-cayci">0</b></span>
+        </div>
+      </section>
+
+      <div class="event-toasts" id="toasts" aria-live="polite"></div>
+
+      <div class="cinematic" id="cinematic">
+        <div class="cine-thread"></div>
+        <img id="cine-avatar" alt="" />
+        <div class="cine-copy">
+          <span id="cine-kicker">MUHTAR ZİYARETİ</span>
+          <strong id="cine-name">izleyici</strong>
+          <em id="cine-sub">Meydan altın sarısına büründü</em>
+        </div>
+        <span class="cine-gift" id="cine-icon">🎩</span>
+      </div>
+
+      <footer class="hud-bottom">
+        <div class="ticker" id="ticker">
+          <span class="ticker-key">İPUCU</span>
+          <span id="ticker-text">Sohbete <b>1</b> yaz → masaya otur · <b>2</b> yaz → çırak ol</span>
+        </div>
+      </footer>
+
+      <div class="mini-controls">
+        <span class="demo-badge" id="demo-badge">DEMO YAYIN</span>
+        <button class="icon-btn" id="aspect-btn" type="button" title="Ekran oranı (F9)" aria-label="Ekran oranı">
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 19h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span id="aspect-label">9:16</span>
+        </button>
+        <button class="icon-btn" id="sound-btn" type="button" title="Sesi aç / kapat" aria-label="Ses">
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 9.5v5h3.4l4.2 3.6c.6.5 1.4.1 1.4-.6V6.5c0-.7-.8-1.1-1.4-.6L7.4 9.5H4Z" fill="currentColor"/><path id="sound-wave" d="M16 8.5a5 5 0 0 1 0 7M18.7 6a8.6 8.6 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span id="sound-label">AÇ</span>
+        </button>
+      </div>
+
+      <div class="round-overlay" id="round-overlay" hidden>
+        <div class="confetti" id="confetti" aria-hidden="true"></div>
+        <div class="verdict">
+          <span class="verdict-kicker" id="verdict-kicker">TUR BİTTİ</span>
+          <h2 id="verdict-title">CHAT KAZANDI!</h2>
+          <p id="verdict-sub">Meydan karıştı, çaycı yetişemedi.</p>
+          <div class="verdict-stats">
+            <span>KAOS <b id="verdict-chaos">%100</b></span>
+            <span>TUR <b id="verdict-round">1</b></span>
+          </div>
+          <div class="verdict-next">Yeni tur <b id="verdict-next">5</b> sn içinde başlıyor…</div>
+        </div>
+      </div>
+
+      <div class="sound-hint" id="sound-hint">🔊 Sesi açmak için ekrana dokun</div>
+
+      <div class="fatal" id="fatal" hidden>
+        <div>
+          <h1>3D sahne yüklenemedi</h1>
+          <p id="fatal-message">Tarayıcında WebGL desteği gerekiyor.</p>
+          <button onclick="location.reload()" type="button">Yeniden dene</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="boot">
+    <div class="boot-cup" aria-hidden="true">
+      <span class="steam s1"></span><span class="steam s2"></span><span class="steam s3"></span>
+      <svg viewBox="0 0 96 110" width="86" height="98">
+        <path d="M22 34h50l-4.5 44c-.5 6.2-5.6 10.5-11.8 10.5H38.3c-6.2 0-11.3-4.3-11.8-10.5L22 34Z" fill="#b7762e" stroke="#f7dfae" stroke-width="2.6"/>
+        <path d="M24 46h46" stroke="#ffe9c2" stroke-width="2" opacity=".55"/>
+        <path d="M72 42c10-1.5 11 12 2 12.5" fill="none" stroke="#f7dfae" stroke-width="3" stroke-linecap="round"/>
+        <ellipse cx="48" cy="34" rx="25" ry="5" fill="#5d2f12" stroke="#f7dfae" stroke-width="2"/>
+      </svg>
+    </div>
+    <h1>ÇAY OCAĞI KAOSU</h1>
+    <p>Mahalle meydanı kuruluyor…</p>
+    <div class="boot-bar"><i></i></div>
+  </div>
+
+  <script type="module" src="/js/game.js"></script>
+</body>
+</html>

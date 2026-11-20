@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08060d" />
+  <meta name="description" content="Çay Ocağı Kaosu yönetim paneli — TikTok Live bağlantısı, hediye eşleştirme, tur kontrolü ve canlı metrikler." />
+  <title>Yönetim Paneli — Çay Ocağı Kaosu</title>
+  <link rel="stylesheet" href="/css/admin.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="mark" href="/" aria-label="Oyunu aç">
+        <span class="mark-cup" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="28" height="28">
+            <path d="M10 13h17l-1.7 12.6A5.4 5.4 0 0 1 20 30h-2.2a5.4 5.4 0 0 1-5.3-4.4L10 13Z" fill="#e8b46b" stroke="#3a2313" stroke-width="1.4"/>
+            <path d="M11 17h15" stroke="#fff2d4" stroke-width="1.2" opacity=".65"/>
+            <path d="M17 13c0-2 1.4-2.6 1.4-4.2M22 13c0-2 1.4-2.6 1.4-4.2" stroke="#ffe3ad" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M27 16.5c3.2-.4 3.4 3.7.6 4" stroke="#e8b46b" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span>
+          <strong>ÇAY OCAĞI</strong>
+          <em>KAOSU · PANEL</em>
+        </span>
+      </a>
+
+      <nav class="nav" aria-label="Bölümler">
+        <a href="#baglanti" class="active"><i>◉</i> Bağlantı</a>
+        <a href="#durum"><i>▤</i> Durum</a>
+        <a href="#tur"><i>⏱</i> Tur kontrolü</a>
+        <a href="#eslestirme"><i>🎁</i> Hediye eşleştirme</a>
+        <a href="#atmosfer"><i>🌫</i> Atmosfer</a>
+        <a href="#akis"><i>≡</i> Canlı akış</a>
+      </nav>
+
+      <div class="side-foot">
+        <div class="conn" id="side-conn">
+          <span class="dot" id="side-dot"></span>
+          <span id="side-mode">Bağlanıyor…</span>
+        </div>
+        <a class="btn ghost wide" href="/" target="_blank" rel="noopener">🎥 Oyunu aç</a>
+        <span class="tiny">v3.0 Pro · Mahalle Meydanı</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1>Yayın Kumandası</h1>
+          <p class="sub">TikTok Live olayları, tur akışı ve hediye kuralları tek ekranda.</p>
+        </div>
+        <div class="top-pills">
+          <span class="pill" id="pill-clients" title="Bağlı istemci">👥 <b>0</b> istemci</span>
+          <span class="pill live" id="pill-live"><i></i> DEMO</span>
+          <span class="pill" id="pill-clock">--:--:--</span>
+        </div>
+      </header>
+
+      <section id="baglanti" class="card connect-card">
+        <div class="card-head">
+          <div>
+            <h2>TikTok Live bağlantısı</h2>
+            <p>Yayıncı kullanıcı adını gir; sohbet, beğeni, hediye ve üyeler oyuna akmaya başlar.</p>
+          </div>
+          <span class="status" id="tiktok-state">BEKLEMEDE</span>
+        </div>
+        <form id="connect-form" class="connect-form" autocomplete="off">
+          <label class="field grow">
+            <span>@kullanıcıadı</span>
+            <input id="username" name="username" type="text" placeholder="ornek_yayinci" spellcheck="false" maxlength="64" />
+          </label>
+          <button class="btn primary" id="connect-btn" type="submit">Bağlan</button>
+          <button class="btn danger" id="disconnect-btn" type="button">Bağlantıyı kes</button>
+        </form>
+        <div class="connect-meta">
+          <span>Oda: <b id="room-id">—</b></span>
+          <span>Olay: <b id="event-count">0</b></span>
+          <span>Mesaj: <b id="tiktok-message">Hazır</b></span>
+        </div>
+      </section>
+
+      <section id="durum" class="kpis" aria-label="Canlı metrikler">
+        <article class="kpi amber"><span>İzleyici</span><b id="kpi-viewers">0</b><em id="kpi-viewers-sub">yayın</em></article>
+        <article class="kpi red"><span>Kaos</span><b id="kpi-chaos">0%</b><em><i class="bar"><u id="kpi-chaos-bar"></u></i></em></article>
+        <article class="kpi blue"><span>Kalan süre</span><b id="kpi-timer">05:00</b><em id="kpi-state">oyun</em></article>
+        <article class="kpi green"><span>Tur</span><b id="kpi-round">1</b><em id="kpi-wins">Chat 0 · Çaycı 0</em></article>
+        <article class="kpi"><span>Müşteri / Çırak</span><b id="kpi-players">0/0</b><em id="kpi-seats">0 masa dolu</em></article>
+        <article class="kpi"><span>Hediye / Beğeni</span><b id="kpi-gifts">0/0</b><em id="kpi-fights">0 kavga</em></article>
+      </section>
+
+      <div class="columns">
+        <div class="col">
+          <section id="tur" class="card">
+            <div class="card-head">
+              <div>
+                <h2>Tur kontrolü</h2>
+                <p>Yayın sırasında turu yönet. Oyun anında tepki verir.</p>
+              </div>
+              <span class="tag" id="round-tag">TUR 1</span>
+            </div>
+            <div class="btn-grid">
+              <button class="btn" data-round="start">▶ Başlat</button>
+              <button class="btn" data-round="pause">⏸ Duraklat</button>
+              <button class="btn" data-round="resume">⏵ Devam</button>
+              <button class="btn" data-round="reset">↺ Sıfırla</button>
+              <button class="btn" data-round="end-chat">🏆 Chat kazansın</button>
+              <button class="btn" data-round="end-cayci">🏆 Çaycı kazansın</button>
+              <button class="btn" data-round="skip">⏭ Tur atla</button>
+              <button class="btn danger" id="kick-all" type="button">🥾 Herkesi çıkar</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Olay simülatörü</h2>
+                <p>Bağlantı olmadan oyunu ve paneli test et.</p>
+              </div>
+            </div>
+            <div class="sim-grid">
+              <button class="btn" data-sim="join" data-command="1">💬 “1” yorumu</button>
+              <button class="btn" data-sim="join" data-command="2">🧹 “2” yorumu</button>
+              <button class="btn" data-sim="chat">🗨 Rastgele sohbet</button>
+              <button class="btn" data-sim="like">❤️ Beğeni yağmuru</button>
+              <button class="btn" data-sim="member">👋 Üye girişi</button>
+              <button class="btn" data-sim="gift" data-coins="1">🌹 1 jeton</button>
+              <button class="btn" data-sim="gift" data-coins="10">❤️ 10 jeton</button>
+              <button class="btn" data-sim="gift" data-coins="30">🍩 30 jeton</button>
+              <button class="btn" data-sim="gift" data-coins="100">🐕 100 jeton</button>
+              <button class="btn" data-sim="gift" data-coins="300">🦁 300 jeton</button>
+              <button class="btn" data-sim="gift" data-coins="1000">🌌 1000 jeton</button>
+              <button class="btn primary" id="sim-random" type="button">🎲 Rastgele olay</button>
+            </div>
+          </section>
+
+          <section class="card" id="players-card">
+            <div class="card-head">
+              <div>
+                <h2>Meydandakiler</h2>
+                <p>Canlı oyuncu listesi. İstediğini meydandan çıkar.</p>
+              </div>
+              <span class="tag" id="player-tag">0 kişi</span>
+            </div>
+            <div class="players" id="players">
+              <p class="empty">Henüz oyuncu yok.</p>
+            </div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="card" id="eslestirme">
+            <div class="card-head">
+              <div>
+                <h2>Hediye eşleştirme</h2>
+                <p>Jeton aralıkları ve tek tek hediye kuralları. Kaydetmeden oyun değişmez.</p>
+              </div>
+              <span class="tag" id="mapping-tag">TEMİZ</span>
+            </div>
+
+            <div class="mini-grid">
+              <label class="field">
+                <span>Beğeni aksiyonu</span>
+                <select id="likes-action"></select>
+              </label>
+              <label class="field">
+                <span>“1” yorumu</span>
+                <select id="command-1"></select>
+              </label>
+              <label class="field">
+                <span>“2” yorumu</span>
+                <select id="command-2"></select>
+              </label>
+            </div>
+
+            <h3 class="sub-title">Jeton aralıkları</h3>
+            <div class="ranges" id="ranges"></div>
+
+            <div class="override-head">
+              <h3 class="sub-title">Tek hediye kuralları</h3>
+              <label class="field search">
+                <input id="gift-search" type="search" placeholder="Hediye ara…" />
+              </label>
+            </div>
+            <p class="hint">Bir hediye seçersen jeton aralığı yerine o aksiyon çalışır. Boş bırakılanlar aralığa döner.</p>
+            <div class="gift-table" id="gift-table"></div>
+
+            <div class="save-row">
+              <button class="btn primary" id="save-mapping" type="button">💾 Kuralları kaydet</button>
+              <button class="btn ghost" id="reset-mapping" type="button">Varsayılana dön</button>
+              <span class="save-note" id="save-note"></span>
+            </div>
+          </section>
+
+          <section class="card" id="atmosfer">
+            <div class="card-head">
+              <div>
+                <h2>Atmosfer</h2>
+                <p>Sahne ışığı, sis, bloom ve tur süresi. Değişiklikler anında uygulanır.</p>
+              </div>
+            </div>
+            <div class="sliders" id="sliders"></div>
+            <div class="mini-grid">
+              <label class="field">
+                <span>Günün saati</span>
+                <select id="time-of-day">
+                  <option value="dusk">Alacakaranlık</option>
+                  <option value="golden">Altın saat</option>
+                  <option value="night">Gece</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Ekran oranı</span>
+                <select id="aspect">
+                  <option value="auto">Otomatik</option>
+                  <option value="9:16">9:16 dikey</option>
+                  <option value="16:9">16:9 yatay</option>
+                </select>
+              </label>
+              <label class="check">
+                <input type="checkbox" id="auto-demo" />
+                <span>Otomatik demo olayları</span>
+              </label>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section id="akis" class="card log-card">
+        <div class="card-head">
+          <div>
+            <h2>Canlı akış</h2>
+            <p>TikTok olayları, oyun içi izler ve bağlantı günlüğü.</p>
+          </div>
+          <div class="log-tools">
+            <span class="tag" id="log-count">0 olay</span>
+            <button class="btn ghost small" id="log-clear" type="button">Temizle</button>
+            <button class="btn ghost small" id="log-pause" type="button">Duraklat</button>
+          </div>
+        </div>
+        <ol class="log" id="log" reversed></ol>
+      </section>
+
+      <footer class="foot">
+        <span>3D Çay Ocağı Kaosu · Mahalle Meydanı</span>
+        <span>Three.js + Socket.IO + tiktok-live-connector</span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

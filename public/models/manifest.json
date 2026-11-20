@@ -1,0 +1,69 @@
+{
+  "generator": "blender/build-all.sh",
+  "last_script": "blender/objeler.py",
+  "blender": "5.0.1",
+  "license": "CC0-1.0",
+  "assets": [
+    {
+      "file": "altin_tepsi.glb",
+      "bytes": 30744
+    },
+    {
+      "file": "cay_bardagi.glb",
+      "bytes": 7988
+    },
+    {
+      "file": "cay_tepsisi.glb",
+      "bytes": 105720,
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "cayci.glb",
+      "bytes": 38828
+    },
+    {
+      "file": "mahalle_meydani.glb",
+      "bytes": 743968
+    },
+    {
+      "file": "muhtar.glb",
+      "bytes": 41000
+    },
+    {
+      "file": "musteri.glb",
+      "bytes": 36940
+    },
+    {
+      "file": "okey_masasi.glb",
+      "bytes": 63748,
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "okey_tasi.glb",
+      "bytes": 11092
+    },
+    {
+      "file": "semaver.glb",
+      "bytes": 74252,
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sokak_lambasi.glb",
+      "bytes": 29712,
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "tost.glb",
+      "bytes": 13452
+    },
+    {
+      "file": "uyuyan_kedi.glb",
+      "bytes": 156272,
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "zabita.glb",
+      "bytes": 36088
+    }
+  ]
+}
