@@ -1,4 +1,5 @@
 import { SoundEngine } from './sound_engine.js';
+import * as THREE from '/vendor/three.module.js';
 const canvas=document.querySelector('#canvas'),sound=new SoundEngine();
 const hud=document.querySelector('#banner'),safe=document.querySelector('#safe');
 let mode='16:9',portrait=false,safeOn=false;
@@ -8,9 +9,8 @@ function init(){
  socket.on('gameAction',handle);socket.on('settings',applySettings);socket.on('leaderboard',l=>syncPlayers(l||[]));
  document.addEventListener('pointerdown',()=>{sound.init();if(!marchStarted)sound.marching(players.size||18)}, {once:true});
 }
-function loadThreeThen(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.min.js';s.onload=()=>startGame();document.head.append(s)}
-loadThreeThen();
 let scene,camera,renderer,clock,players=new Map(),group,catapultParticles=[],marchStarted=false,cinematic=null,cinematicUntil=0,shake=0;
+queueMicrotask(() => startGame());
 function startGame(){
  scene=new THREE.Scene();scene.background=new THREE.Color(0x121914);scene.fog=new THREE.Fog(0x121914,42,92);
  camera=new THREE.PerspectiveCamera(portrait?52:42,innerWidth/innerHeight,.1,180);renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight,false);renderer.shadowMap.enabled=true;clock=new THREE.Clock();
@@ -26,8 +26,58 @@ function buildRoad(){const mat=new THREE.MeshStandardMaterial({color:0x6a5a42,ro
 function buildThrone(){const gold=new THREE.MeshStandardMaterial({color:0xd7aa45,metalness:.75,roughness:.25});const base=new THREE.Mesh(new THREE.BoxGeometry(5,1.2,4),gold);base.position.set(0,1,-20);base.castShadow=true;group.add(base);const back=new THREE.Mesh(new THREE.BoxGeometry(5,5,.5),gold);back.position.set(0,3.5,-21.5);group.add(back);for(const x of [-2.8,2.8]){const red=new THREE.Mesh(new THREE.BoxGeometry(.7,.7,1),new THREE.MeshStandardMaterial({color:0x7e1717,roughness:.7}));red.position.set(x,1,-21);group.add(red)}}
 function buildCity(){const stone=new THREE.MeshStandardMaterial({color:0x76664a,roughness:1});for(let i=0;i<7;i++){const x=-21+i*7;const b=new THREE.Mesh(new THREE.BoxGeometry(5,5+i%3,5),stone);b.position.set(x,2.5,-27-i%2);b.castShadow=true;group.add(b);const d=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,7,12),stone);d.position.set(x,6,-27-i%2);group.add(d)}}
 function buildCatapults(){for(const x of [-16,16]){const mat=new THREE.MeshStandardMaterial({color:0x5b321a,roughness:.8});const c=new THREE.Mesh(new THREE.BoxGeometry(3,1.5,3),mat);c.position.set(x,1,4);c.castShadow=true;group.add(c)}}
-function meshFor(rank){const tier={Nefer:0,Sipahi:1,Sancaktar:2,Akıncı:3,Vezir:4}[rank]||0;const colors=[0x6b7a68,0x737e87,0xa79b6c,0x5a6063,0x8f2020];const g=new THREE.Group();const body=new THREE.Mesh(new THREE.CapsuleGeometry(.38,1.15,4,8),new THREE.MeshStandardMaterial({color:colors[tier],roughness:.55,metalness:tier>.2?.35:0}));body.position.y=1.05;body.castShadow=true;g.add(body);if(tier>=1){const helmet=new THREE.Mesh(new THREE.SphereGeometry(.48,10,8),new THREE.MeshStandardMaterial({color:0x9a9272,metalness:.6,roughness:.3});helmet.position.y=1.95;g.add(helmet)}if(tier>=2){const cape=new THREE.Mesh(new THREE.PlaneGeometry(.9,1.2),new THREE.MeshStandardMaterial({color:0x7a1818,side:THREE.DoubleSide});cape.position.set(0,1.15,.38);g.add(cape)}if(tier>=3){const horse=new THREE.Mesh(new THREE.CapsuleGeometry(.55,1.5,4,8),new THREE.MeshStandardMaterial({color:0x4a2b20,roughness:.8});horse.rotation.z=Math.PI/2;horse.position.set(.8,.65,0);g.add(horse)}if(tier>=4){const frame=new THREE.Mesh(new THREE.TorusGeometry(.55,.08,8,24),new THREE.MeshStandardMaterial({color:0xd8ad5a,metalness:.8,roughness:.2});frame.position.y=2.25;g.add(frame)}
- const head=new THREE.Mesh(new THREE.SphereGeometry(.28,12,8),new THREE.MeshStandardMaterial({color:0xc89b70,roughness:.8});head.position.y=2.05;g.add(head);return g}
+function meshFor(rank) {
+  const tier = { Nefer: 0, Sipahi: 1, Sancaktar: 2, Akıncı: 3, Vezir: 4 }[rank] || 0;
+  const colors = [0x6b7a68, 0x737e87, 0xa79b6c, 0x5a6063, 0x8f2020];
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(.38, 1.15, 4, 8),
+    new THREE.MeshStandardMaterial({ color: colors[tier], roughness: .55, metalness: tier > .2 ? .35 : 0 })
+  );
+  body.position.y = 1.05;
+  body.castShadow = true;
+  g.add(body);
+  if (tier >= 1) {
+    const helmet = new THREE.Mesh(
+      new THREE.SphereGeometry(.48, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x9a9272, metalness: .6, roughness: .3 })
+    );
+    helmet.position.y = 1.95;
+    g.add(helmet);
+  }
+  if (tier >= 2) {
+    const cape = new THREE.Mesh(
+      new THREE.PlaneGeometry(.9, 1.2),
+      new THREE.MeshStandardMaterial({ color: 0x7a1818, side: THREE.DoubleSide })
+    );
+    cape.position.set(0, 1.15, .38);
+    g.add(cape);
+  }
+  if (tier >= 3) {
+    const horse = new THREE.Mesh(
+      new THREE.CapsuleGeometry(.55, 1.5, 4, 8),
+      new THREE.MeshStandardMaterial({ color: 0x4a2b20, roughness: .8 })
+    );
+    horse.rotation.z = Math.PI / 2;
+    horse.position.set(.8, .65, 0);
+    g.add(horse);
+  }
+  if (tier >= 4) {
+    const frame = new THREE.Mesh(
+      new THREE.TorusGeometry(.55, .08, 8, 24),
+      new THREE.MeshStandardMaterial({ color: 0xd8ad5a, metalness: .8, roughness: .2 })
+    );
+    frame.position.y = 2.25;
+    g.add(frame);
+  }
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(.28, 12, 8),
+    new THREE.MeshStandardMaterial({ color: 0xc89b70, roughness: .8 })
+  );
+  head.position.y = 2.05;
+  g.add(head);
+  return g;
+}
 function addPlayer(p,remote=false){if(players.has(p.uniqueId)&&!remote)return;const g=meshFor(p.rank||'Nefer');g.userData=p;players.set(p.uniqueId,g);group.add(g);positionPlayer(p.uniqueId)}
 function syncPlayers(list){if(!list?.length)return;list.forEach(p=>addPlayer(p,true));layoutPlayers()}
 function positionPlayer(id){const arr=[...players.values()];arr.sort((a,b)=>(b.userData.score||0)-(a.userData.score||0));const i=arr.indexOf(players.get(id));if(i<0)return;const cols=portrait?7:11,row=Math.floor(i/cols),col=i%cols;const x=(col-(cols-1)/2)*1.8,rowOffset=row%2*.7;players.get(id).position.set(x,rowOffset,12+row*2.2)}
@@ -42,4 +92,5 @@ function applySettings(s){if(s?.muted!==undefined)sound.mute(s.muted);if(s?.volu
 function toggleMode(){portrait=!portrait;mode=portrait?'9:16':'16:9';applyMode()}
 function applyMode(){if(portrait){camera.fov=52}else{camera.fov=42}resize();layoutPlayers()}
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(portrait)safe.className=safeOn?'on':''}
-const base=new THREE.Vector3(17,13,28);function animate(){requestAnimationFrame(animate);const dt=clock.getDelta(),t=clock.elapsedTime;let target=base.clone();if(cinematic&&t<cinematicUntil&&cinematic.target?.position){target=cinematic.target.position.clone().add(cinematic.type==='hero'?new THREE.Vector3(7,5,-8):new THREE.Vector3(5,4,6))}camera.position.lerp(target,.035);if(shake>0){camera.position.x+=(Math.random()-.5)*shake;camera.position.y+=(Math.random()-.5)*shake*.5;shake*=.88}camera.lookAt(0,2,portrait?2:-4);for(const g of players.values()){if(g.userData.target)g.position.lerp(g.userData.target,.04);g.position.y+=Math.sin(t*2+g.position.x)*.008}renderer.render(scene,camera)}
+let base;
+function animate(){requestAnimationFrame(animate);if(!base)base=new THREE.Vector3(17,13,28);const dt=clock.getDelta(),t=clock.elapsedTime;let target=base.clone();if(cinematic&&t<cinematicUntil&&cinematic.target?.position){target=cinematic.target.position.clone().add(cinematic.type==='hero'?new THREE.Vector3(7,5,-8):new THREE.Vector3(5,4,6))}camera.position.lerp(target,.035);if(shake>0){camera.position.x+=(Math.random()-.5)*shake;camera.position.y+=(Math.random()-.5)*shake*.5;shake*=.88}camera.lookAt(0,2,portrait?2:-4);for(const g of players.values()){if(g.userData.target)g.position.lerp(g.userData.target,.04);g.position.y+=Math.sin(t*2+g.position.x)*.008}renderer.render(scene,camera)}
