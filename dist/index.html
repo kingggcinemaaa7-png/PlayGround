@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Fetih Korteji</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090706;color:#f8df9a;font-family:Georgia,'Times New Roman',serif}#game{position:absolute;inset:0}canvas{display:block;width:100%!important;height:100%!important}.hud{position:absolute;left:50%;top:3.2%;transform:translateX(-50%) width:100%;width:min(92%,920px);pointer-events:none;text-align:center;z-index:4}.banner{display:inline-flex;min-width:340px;max-width:78%;padding:.55em 1.4em;align-items:center;justify-content:center;background:linear-gradient(90deg,transparent,#741c17 18%,#741c17 82%,transparent);border-top:1px solid #d7ac56;border-bottom:1px solid #d7ac56;color:#ffe7a1;text-transform:uppercase;letter-spacing:.12em;text-shadow:0 2px 8px #000;opacity:0;transition:.45s}.banner.show{opacity:1}.safe{display:none;position:absolute;inset:15% 0 25%;border-top:2px dashed rgba(255,220,130,.48);border-bottom:2px dashed rgba(255,220,130,.48);z-index:3;pointer-events:none}.safe.on{display:block}body.portrait .hud{top:2%}body.portrait canvas{object-fit:cover}
+  </style>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <div id="game"></div>
+  <div class="hud"><div id="banner" class="banner"></div></div>
+  <div id="safe" class="safe"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module">
+    import './js/sound_engine.js';
+    import './js/game.js';
+  </script>
+</body>
+</html>
