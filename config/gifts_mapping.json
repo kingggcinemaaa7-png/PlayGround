@@ -1,0 +1,8 @@
+{
+  "rose": { "giftId": "rose", "action": "RANK_SIPAHI", "name": "Gül" },
+  "heart": { "giftId": "heart", "action": "RANK_SANCAKTAR", "name": "Kalp" },
+  "hat": { "giftId": "hat", "action": "EVENT_MEHTER", "name": "Şapka" },
+  "donut": { "giftId": "donut", "action": "EVENT_CATAPULT", "name": "Donut" },
+  "corgi": { "giftId": "corgi", "action": "RANK_CAVALRY", "name": "Corgi" },
+  "lion": { "giftId": "lion", "action": "RANK_VIZIER", "name": "Aslan" }
+}
