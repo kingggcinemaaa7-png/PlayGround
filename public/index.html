@@ -1,1 +1,59 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fetih Korteji</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#081018}canvas{display:block}#hud{position:absolute;inset:0;pointer-events:none;color:#f5ddb1;font-family:Georgia,serif;text-shadow:0 2px 6px #000}#banner{position:absolute;top:9%;left:50%;transform:translate(-50%, -150%);padding:10px 28px;border:1px solid #d8ad5a;background:linear-gradient(90deg,#2a160d,#70451a,#2a160d);font-size:clamp(14px,2.2vw,28px);opacity:0;transition:.45s}#banner.show{transform:translate(-50%,0);opacity:1}#safe{display:none;position:absolute;inset:0;border:15% solid transparent}#safe.on:before{content:'';position:absolute;left:0;right:0;top:15%;height:1px;border-top:2px dashed rgba(216,173,90,.65)}#safe.on:after{content:'';position:absolute;left:0;right:0;bottom:25%;height:1px;border-top:2px dashed rgba(216,173,90,.65)}</style></head><body><canvas id="canvas"></canvas><div id="hud"><div id="banner"></div><div id="safe"></div></div><script type="module" src="/js/game.js"></script></body></html>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fetih Korteji</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a0d14}
+  body{font-family:Georgia,'Times New Roman',serif}
+  canvas{display:block;width:100%;height:100%}
+  #hud{position:absolute;inset:0;pointer-events:none;color:#f5ddb1}
+  #vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(4,6,10,.55) 100%)}
+  #flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 55%,rgba(255,170,70,.85),rgba(255,90,20,.25) 55%,transparent 80%)}
+  #wordmark{position:absolute;top:26px;left:30px;font-size:clamp(11px,1.25vw,16px);letter-spacing:.42em;color:#e9cf9a;opacity:.85;text-shadow:0 2px 10px #000;animation:fadeWord 9s ease forwards}
+  #wordmark b{font-weight:400;color:#fff3d4}
+  @keyframes fadeWord{0%{opacity:0;transform:translateY(-6px)}12%{opacity:.95;transform:none}70%{opacity:.85}100%{opacity:.42}}
+  #ferman{position:absolute;top:7.5%;left:50%;transform:translate(-50%,-140%);width:min(760px,86vw);padding:14px 42px 15px;text-align:center;
+    background:linear-gradient(180deg,rgba(48,24,12,.94),rgba(26,12,8,.94));border:1px solid #d8ad5a;
+    box-shadow:0 12px 40px rgba(0,0,0,.55),inset 0 0 34px rgba(216,173,90,.12);opacity:0;transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .5s}
+  #ferman.show{transform:translate(-50%,0);opacity:1}
+  #ferman:before,#ferman:after{content:'';position:absolute;width:16px;height:16px;border:1px solid #d8ad5a}
+  #ferman:before{left:6px;top:6px;border-right:0;border-bottom:0}
+  #ferman:after{right:6px;bottom:6px;border-left:0;border-top:0}
+  #ferman .eyebrow{font-size:10px;letter-spacing:.5em;color:#c9a05a;margin-bottom:4px}
+  #ferman h2{margin:0;font-size:clamp(17px,2.5vw,30px);font-weight:400;letter-spacing:.16em;color:#fbe6b6;text-shadow:0 2px 12px rgba(0,0,0,.8)}
+  #ferman p{margin:5px 0 0;font-size:clamp(11px,1.15vw,15px);color:#cbb489;letter-spacing:.04em}
+  #ferman .orn{color:#d8ad5a;font-size:11px;letter-spacing:.5em;margin-top:4px}
+  #safe{position:absolute;inset:0;opacity:0;transition:opacity .25s}
+  #safe.on{opacity:1}
+  #safe:before,#safe:after{content:'';position:absolute;left:0;right:0;pointer-events:none}
+  #safe:before{top:15%;height:15%;background:linear-gradient(180deg,rgba(0,0,0,.3),rgba(0,0,0,.05));border-bottom:2px dashed rgba(216,173,90,.7)}
+  #safe:after{bottom:25%;height:25%;background:linear-gradient(0deg,rgba(0,0,0,.35),rgba(0,0,0,.04));border-top:2px dashed rgba(216,173,90,.7)}
+  #safe span{position:absolute;left:14px;font:11px/1 system-ui,sans-serif;letter-spacing:.16em;color:rgba(240,215,160,.8);text-transform:uppercase}
+  #safe span.top{top:calc(15% + 8px)}
+  #safe span.bottom{bottom:calc(25% + 8px)}
+  body.portrait #ferman{top:16.5%;width:min(560px,88vw);padding:12px 26px}
+  body.portrait #wordmark{top:17%;left:50%;transform:translateX(-50%);text-align:center;width:100%}
+  body.portrait #ferman h2{font-size:clamp(15px,4vw,24px)}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="hud">
+  <div id="wordmark"><b>FETİH</b> KORTEJİ</div>
+  <div id="ferman">
+    <div class="eyebrow">FETİH FERMANI</div>
+    <h2 id="bannerTitle"></h2>
+    <p id="bannerSub"></p>
+    <div class="orn">❖ ❖ ❖</div>
+  </div>
+  <div id="safe"><span class="top">TikTok başlık alanı</span><span class="bottom">Sohbet alanı</span></div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/js/game.js"></script>
+</body>
+</html>

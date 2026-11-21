@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "uniqueId": "test-cat",
+    "nickname": "Test Paşa",
+    "avatar": "",
+    "rank": "Nefer",
+    "score": 100
+  }
+]

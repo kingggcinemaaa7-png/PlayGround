@@ -21,6 +21,14 @@ Admin panelindeki kullanıcı adı alanına `@` olmadan yayıncı kullanıcı ad
 
 Server, gift olaylarında `giftType === 1` için `repeatEnd === false` durumlarını tekrar sayım olarak filtreler.
 
+## Sahne (v3)
+
+- Alay meydanı: Selçuklu taş yolu, kemerli köprü korkulukları, meşaleler, kubbeli/minareli şehir silüeti, saltanat tahtı ve kanopi.
+- Her izleyici için profil madalyonu veya sancak; üst rütbelerde büyük sancak.
+- Mancınık gülleleri, Sadrazam Mührü, mehter davulcuları, kıvılcım/duman partikülleri ve kamera sarsıntısı.
+- Akıllı yönetmen kamera: geniş açı, terfi takibi, taht kahraman açısı ve olay kamerası arasında yumuşak geçiş.
+- 9:16 ve 16:9 için ayrı kadraj; F9 ile anında geçiş.
+
 ## Kontroller
 
 - Oyun ekranında `F9`: 9:16 / 16:9 geçişi
